@@ -252,7 +252,7 @@ local function farmBossLoop()
 				hrp.Anchored = true
 				local targetChest = daydreamChests[1]
 				if targetChest and targetChest.Parent then
-					hrp.CFrame = CFrame.new(targetChest:GetPivot().Position + Vector3.new(0, 5, 0))
+					hrp.CFrame = CFrame.new(targetChest:GetPivot().Position + Vector3.new(0, 10, 0))
 					while targetChest.Parent and autoFarmBoss do
 						local currentChests = getActiveChests()
 						local stillExists = false
@@ -270,7 +270,7 @@ local function farmBossLoop()
 				end
 			elseif bossChest and bossChest.Parent then
 				hrp.Anchored = true
-				hrp.CFrame = CFrame.new(bossChest:GetPivot().Position + Vector3.new(0, 5, 0))
+				hrp.CFrame = CFrame.new(bossChest:GetPivot().Position + Vector3.new(0, 10, 0))
 				task.wait(0.2)
 			else
 				hrp.Anchored = false
@@ -312,9 +312,10 @@ local function scanMap()
 			if not isScanning or not autoMiniBoss then
 				break
 			end
-			if not visited[room] then
-				visited[room] = true
-				hrp.CFrame = getRoomCFrame(room) * CFrame.new(0, 10, 0)
+			local roomKey = room:GetAttribute("RoomUID") or room.Name
+			if roomKey and not visited[roomKey] then
+				visited[roomKey] = true
+				hrp.CFrame = getRoomCFrame(room) * CFrame.new(0, 25, 0)
 				moved = true
 				task.wait(0.2)
 				break
