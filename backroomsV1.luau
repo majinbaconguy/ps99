@@ -231,10 +231,10 @@ local function getRoomsList()
 end
 
 local function hasDaydreamKey()
-	local keyItem = MiscItem("Backrooms Crayon Key")
-	if keyItem and keyItem:HasAny() then
-		return true
-	end
+	--local keyItem = MiscItem("Backrooms Crayon Key")
+	--if keyItem and keyItem:HasAny() then
+	--	return true
+	--end
 	return true
 end
 
