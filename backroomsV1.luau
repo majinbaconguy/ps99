@@ -31,6 +31,7 @@ local Window = Rayfield:CreateWindow({
 local Tab = Window:CreateTab("Main", nil)
 local autoClaim = false
 local autoMiniBoss = false
+local autoFarmBoss = false
 local claimedRewards = {}
 local isScanning = false
 
@@ -222,16 +223,18 @@ end
 local function getActiveChests()
 	local daydreamChests = {}
 	local bossChest = nil
-	local things = workspace:FindFirstChild("__THINGS")
-	local breakablesFolder = things and things:FindFirstChild("Breakables")
-	if breakablesFolder then
-		for _, child in ipairs(breakablesFolder:GetChildren()) do
-			local breakableId = child:GetAttribute("BreakableID") or child.Name
-			if typeof(breakableId) == "string" then
-				if breakableId == "Daydream Mimic Chest" or breakableId == "Daydream Chest" then
-					table.insert(daydreamChests, child)
-				elseif breakableId == "Daydream Mimic Boss" then
-					bossChest = child
+	local BreakableCmds = require(game.ReplicatedStorage.Library.Client.BreakableCmds)
+	local chests = BreakableCmds.AllByInstanceAndClass("Chest")
+	if chests then
+		for _, model in pairs(chests) do
+			if model and model.Parent then
+				local breakableId = model:GetAttribute("BreakableID") or model.Name
+				if typeof(breakableId) == "string" then
+					if breakableId == "Daydream Mimic Chest" or breakableId == "Daydream Chest" then
+						table.insert(daydreamChests, model)
+					elseif breakableId == "Daydream Mimic Boss" then
+						bossChest = model
+					end
 				end
 			end
 		end
@@ -239,18 +242,18 @@ local function getActiveChests()
 	return daydreamChests, bossChest
 end
 
-local function farmBoss(bossRoom)
-	while autoMiniBoss and bossRoom.Parent and not bossRoom:GetAttribute("BossDefeatedAt") do
+local function farmBossLoop()
+	while autoFarmBoss do
 		local daydreamChests, bossChest = getActiveChests()
 		local character = game.Players.LocalPlayer.Character
 		local hrp = character and character:FindFirstChild("HumanoidRootPart")
 		if hrp then
-			hrp.Anchored = true
 			if #daydreamChests > 0 then
+				hrp.Anchored = true
 				local targetChest = daydreamChests[1]
 				if targetChest and targetChest.Parent then
 					hrp.CFrame = CFrame.new(targetChest:GetPivot().Position + Vector3.new(0, 5, 0))
-					while targetChest.Parent and autoMiniBoss and bossRoom.Parent and not bossRoom:GetAttribute("BossDefeatedAt") do
+					while targetChest.Parent and autoFarmBoss do
 						local currentChests = getActiveChests()
 						local stillExists = false
 						for _, chest in ipairs(currentChests) do
@@ -266,9 +269,11 @@ local function farmBoss(bossRoom)
 					end
 				end
 			elseif bossChest and bossChest.Parent then
+				hrp.Anchored = true
 				hrp.CFrame = CFrame.new(bossChest:GetPivot().Position + Vector3.new(0, 5, 0))
 				task.wait(0.2)
 			else
+				hrp.Anchored = false
 				task.wait(0.5)
 			end
 		else
@@ -324,69 +329,61 @@ local function scanMap()
 	isScanning = false
 end
 
+local toggleObj
+
 local function bossFarmer()
-	while autoMiniBoss do
-		local bossRoom = findMiniBossRoom()
-		if not bossRoom then
-			scanMap()
-			bossRoom = findMiniBossRoom()
-		end
-		if bossRoom and autoMiniBoss then
-			local character = game.Players.LocalPlayer.Character
-			local hrp = character and character:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				hrp.CFrame = getRoomCFrame(bossRoom)
-				task.wait(3.0)
-				local lockCFrame = nil
-				local lockedDoors = bossRoom:FindFirstChild("LockedDoors")
-				if lockedDoors then
-					for _, door in ipairs(lockedDoors:GetChildren()) do
-						local lock = door:FindFirstChild("Lock")
-						if lock and lock:IsA("BasePart") then
-							lockCFrame = lock.CFrame
-							break
-						end
+	local bossRoom = findMiniBossRoom()
+	if not bossRoom then
+		scanMap()
+		bossRoom = findMiniBossRoom()
+	end
+	if bossRoom and autoMiniBoss then
+		local character = game.Players.LocalPlayer.Character
+		local hrp = character and character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			local lockedDoors = bossRoom:FindFirstChild("LockedDoors")
+			local isLocked = false
+			local lockCFrame = nil
+			if lockedDoors then
+				for _, door in ipairs(lockedDoors:GetChildren()) do
+					local lock = door:FindFirstChild("Lock")
+					if lock and lock:IsA("BasePart") then
+						isLocked = true
+						lockCFrame = lock.CFrame
+						break
 					end
 				end
-				if lockCFrame then
-					hrp.CFrame = lockCFrame * CFrame.new(0, 0, 2)
-					task.wait(1.0)
-				end
+			end
+			if isLocked and lockCFrame then
+				hrp.CFrame = getRoomCFrame(bossRoom)
+				task.wait(3.0)
+				hrp.CFrame = lockCFrame * CFrame.new(0, 0, 2)
+				task.wait(1.0)
 				local roomsTable = getRoomsTable()
-				local found = false
 				if roomsTable then
 					for uid, roomController in pairs(roomsTable) do
 						if roomController.model == bossRoom then
 							roomController:FireServer("UnlockDoors")
-							found = true
 						end
 					end
 				end
-				if not found then
-					Rayfield:Notify({
-						Title = "Error",
-						Content = "MiniBossRoom controller not found in active rooms list!",
-						Duration = 5.0
-					})
-				end
 				task.wait(1.0)
 				hrp.CFrame = getRoomCFrame(bossRoom)
-				Rayfield:Notify({
-					Title = "MiniBossRoom Found",
-					Content = "Successfully teleported to the MiniBossRoom and unlocked doors!",
-					Duration = 5.0
-				})
-				farmBoss(bossRoom)
-			else
 				task.wait(1.0)
 			end
-		else
-			task.wait(1.0)
+			Rayfield:Notify({
+				Title = "MiniBossRoom Found",
+				Content = "Successfully teleported to the MiniBossRoom and unlocked doors!",
+				Duration = 5.0
+			})
 		end
 	end
+	autoMiniBoss = false
+	task.spawn(function()
+		toggleObj:Set(false)
+	end)
 end
 
-local toggleObj
 toggleObj = Tab:CreateToggle({
 	Name = "Auto Find MiniBossRoom",
 	CurrentValue = false,
@@ -408,6 +405,18 @@ toggleObj = Tab:CreateToggle({
 			task.spawn(bossFarmer)
 		else
 			isScanning = false
+		end
+	end
+})
+
+Tab:CreateToggle({
+	Name = "Auto Farm Boss Chest",
+	CurrentValue = false,
+	Flag = "AutoFarmBoss",
+	Callback = function(Value)
+		autoFarmBoss = Value
+		if Value then
+			task.spawn(farmBossLoop)
 		end
 	end
 })
