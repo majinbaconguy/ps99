@@ -222,20 +222,25 @@ local function hasDaydreamKey()
 	return false
 end
 
-local function getActiveChests()
+local function getActiveChests(bossRoom)
 	local daydreamChests = {}
 	local bossChest = nil
 	local BreakableCmds = require(game.ReplicatedStorage.Library.Client.BreakableCmds)
 	local chests = BreakableCmds.AllByInstanceAndClass("Chest")
 	if chests then
+		local roomCenter = getRoomCFrame(bossRoom).Position
 		for _, model in pairs(chests) do
 			if model and model.Parent then
 				local breakableId = model:GetAttribute("BreakableID") or model.Name
 				if typeof(breakableId) == "string" then
-					if breakableId == "Daydream Mimic Chest" then
-						table.insert(daydreamChests, model)
-					elseif breakableId == "Daydream Mimic Boss" then
-						bossChest = model
+					local chestPos = model:GetPivot().Position
+					local flatDist = (Vector3.new(chestPos.X, 0, chestPos.Z) - Vector3.new(roomCenter.X, 0, roomCenter.Z)).Magnitude
+					if flatDist < 55 then
+						if breakableId == "Daydream Mimic Chest" then
+							table.insert(daydreamChests, model)
+						elseif breakableId == "Daydream Mimic Boss" then
+							bossChest = model
+						end
 					end
 				end
 			end
@@ -260,7 +265,7 @@ end
 
 local function farmBoss(bossRoom)
 	while autoMiniBoss and bossRoom.Parent do
-		local daydreamChests, bossChest = getActiveChests()
+		local daydreamChests, bossChest = getActiveChests(bossRoom)
 		local character = game.Players.LocalPlayer.Character
 		local hrp = character and character:FindFirstChild("HumanoidRootPart")
 		if hrp then
@@ -273,7 +278,7 @@ local function farmBoss(bossRoom)
 					hrp.Anchored = true
 					sendPetsToTarget(targetChest)
 					while targetChest.Parent and autoMiniBoss and bossRoom.Parent do
-						local currentChests = getActiveChests()
+						local currentChests = getActiveChests(bossRoom)
 						local stillExists = false
 						for _, chest in ipairs(currentChests) do
 							if chest == targetChest then
@@ -297,6 +302,9 @@ local function farmBoss(bossRoom)
 				task.wait(0.5)
 			else
 				hrp.Anchored = false
+				character:MoveTo(getRoomCFrame(bossRoom).Position + Vector3.new(0, 10, 0))
+				task.wait(0.1)
+				hrp.Anchored = true
 				task.wait(0.5)
 			end
 		else
