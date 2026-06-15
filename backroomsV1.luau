@@ -376,17 +376,17 @@ toggleObj = Tab:CreateToggle({
 	Callback = function(Value)
 		autoMiniBoss = Value
 		if Value then
-			if not hasDaydreamKey() then
-				Rayfield:Notify({
-					Title = "Error",
-					Content = "You do not have a Daydream Key in your inventory!",
-					Duration = 5.0
-				})
-				task.spawn(function()
-					toggleObj:Set(false)
-				end)
-				return
-			end
+			--if not hasDaydreamKey() then
+			--	Rayfield:Notify({
+			--		Title = "Error",
+			--		Content = "You do not have a Daydream Key in your inventory!",
+			--		Duration = 5.0
+			--	})
+			--	task.spawn(function()
+			--		toggleObj:Set(false)
+			--	end)
+			--	return
+			--end
 			task.spawn(scanMap)
 		else
 			isScanning = false
