@@ -52,6 +52,35 @@ local function getInstanceId()
 	return game.Players.LocalPlayer:GetAttribute("InstanceId") or "Backrooms"
 end
 
+local function getRoomsTable()
+	local ClientModule = require(game.Workspace.__THINGS.__INSTANCE_CONTAINER.Active.Backrooms.ClientModule)
+	local fireClient = ClientModule.Networking.AbstractRoom_FireClient
+	local getupvalues = debug.getupvalues or getupvalues
+	if not getupvalues then return nil end
+	local withRoomFunc = nil
+	for _, v in pairs(getupvalues(fireClient)) do
+		if typeof(v) == "function" then
+			withRoomFunc = v
+			break
+		end
+	end
+	if not withRoomFunc then return nil end
+	local getRoomFunc = nil
+	for _, v in pairs(getupvalues(withRoomFunc)) do
+		if typeof(v) == "function" then
+			getRoomFunc = v
+			break
+		end
+	end
+	if not getRoomFunc then return nil end
+	for _, v in pairs(getupvalues(getRoomFunc)) do
+		if typeof(v) == "table" then
+			return v
+		end
+	end
+	return nil
+end
+
 local function isClaimed(rewardModel)
 	local animated = rewardModel:FindFirstChild("Animated")
 	if animated then
@@ -63,14 +92,14 @@ local function isClaimed(rewardModel)
 	return false
 end
 
-local function getRoomUid(rewardModel)
-	local parent = rewardModel.Parent
-	while parent and parent ~= workspace do
-		local roomUid = parent:GetAttribute("RoomUID")
+local function getRoomUid(instance)
+	local current = instance
+	while current and current ~= workspace do
+		local roomUid = current:GetAttribute("RoomUID")
 		if roomUid then
 			return roomUid
 		end
-		parent = parent.Parent
+		current = current.Parent
 	end
 	return nil
 end
@@ -288,10 +317,22 @@ local function scanMap()
 				hrp.CFrame = lockCFrame * CFrame.new(0, 0, 2)
 				task.wait(1.0)
 			end
-			local roomUid = getRoomUid(bossRoom)
-			if roomUid then
-				Network.Fire("Instancing_FireCustomFromClient", getInstanceId(), "AbstractRoom_FireServer", tostring(roomUid), "UnlockDoors")
-				Network.Fire("Instancing_FireCustomFromClient", getInstanceId(), "AbstractRoom_FireServer", tonumber(roomUid), "UnlockDoors")
+			local roomsTable = getRoomsTable()
+			local found = false
+			if roomsTable then
+				for uid, roomController in pairs(roomsTable) do
+					if roomController.model == bossRoom then
+						roomController:FireServer("UnlockDoors")
+						found = true
+					end
+				end
+			end
+			if not found then
+				Rayfield:Notify({
+					Title = "Error",
+					Content = "MiniBossRoom controller not found in active rooms list!",
+					Duration = 5.0
+				})
 			end
 			task.wait(1.0)
 			hrp.CFrame = getRoomCFrame(bossRoom)
