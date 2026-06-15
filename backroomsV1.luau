@@ -29,9 +29,11 @@ local Window = Rayfield:CreateWindow({
 })
 
 local Tab = Window:CreateTab("Main", nil)
+local MiscTab = Window:CreateTab("Misc", nil)
+
 local autoClaim = false
 local autoMiniBoss = false
-local autoFarmBoss = false
+local infPetsSpeed = false
 local claimedRewards = {}
 local isScanning = false
 
@@ -242,18 +244,35 @@ local function getActiveChests()
 	return daydreamChests, bossChest
 end
 
-local function farmBossLoop()
-	while autoFarmBoss do
+local function sendPetsToTarget(breakableModel)
+	local PlayerPet = require(game.ReplicatedStorage.Library.Client.PlayerPet)
+	local pets = PlayerPet.GetByPlayer(game.Players.LocalPlayer)
+	if pets then
+		for _, pet in pairs(pets) do
+			if pet and typeof(pet) == "table" and typeof(pet.SetTarget) == "function" then
+				pcall(function()
+					pet:SetTarget(breakableModel)
+				end)
+			end
+		end
+	end
+end
+
+local function farmBoss(bossRoom)
+	while autoMiniBoss and bossRoom.Parent do
 		local daydreamChests, bossChest = getActiveChests()
 		local character = game.Players.LocalPlayer.Character
 		local hrp = character and character:FindFirstChild("HumanoidRootPart")
 		if hrp then
 			if #daydreamChests > 0 then
-				hrp.Anchored = true
 				local targetChest = daydreamChests[1]
 				if targetChest and targetChest.Parent then
-					hrp.CFrame = CFrame.new(targetChest:GetPivot().Position + Vector3.new(0, 10, 0))
-					while targetChest.Parent and autoFarmBoss do
+					hrp.Anchored = false
+					character:MoveTo(targetChest:GetPivot().Position + Vector3.new(0, 10, 0))
+					task.wait(0.1)
+					hrp.Anchored = true
+					sendPetsToTarget(targetChest)
+					while targetChest.Parent and autoMiniBoss and bossRoom.Parent do
 						local currentChests = getActiveChests()
 						local stillExists = false
 						for _, chest in ipairs(currentChests) do
@@ -265,13 +284,17 @@ local function farmBossLoop()
 						if not stillExists then
 							break
 						end
-						task.wait(0.2)
+						sendPetsToTarget(targetChest)
+						task.wait(0.5)
 					end
 				end
 			elseif bossChest and bossChest.Parent then
+				hrp.Anchored = false
+				character:MoveTo(bossChest:GetPivot().Position + Vector3.new(0, 10, 0))
+				task.wait(0.1)
 				hrp.Anchored = true
-				hrp.CFrame = CFrame.new(bossChest:GetPivot().Position + Vector3.new(0, 10, 0))
-				task.wait(0.2)
+				sendPetsToTarget(bossChest)
+				task.wait(0.5)
 			else
 				hrp.Anchored = false
 				task.wait(0.5)
@@ -377,6 +400,7 @@ local function bossFarmer()
 				Content = "Successfully teleported to the MiniBossRoom and unlocked doors!",
 				Duration = 5.0
 			})
+			farmBoss(bossRoom)
 		end
 	end
 	autoMiniBoss = false
@@ -411,22 +435,47 @@ toggleObj = Tab:CreateToggle({
 })
 
 Tab:CreateToggle({
-	Name = "Auto Farm Boss Chest",
-	CurrentValue = false,
-	Flag = "AutoFarmBoss",
-	Callback = function(Value)
-		autoFarmBoss = Value
-		if Value then
-			task.spawn(farmBossLoop)
-		end
-	end
-})
-
-Tab:CreateToggle({
 	Name = "Auto Claim Rewards",
 	CurrentValue = false,
 	Flag = "AutoClaimToggle",
 	Callback = function(Value)
 		autoClaim = Value
+	end
+})
+
+local function updateAllPetsSpeed()
+	local PlayerPet = require(game.ReplicatedStorage.Library.Client.PlayerPet)
+	local pets = PlayerPet.GetByPlayer(game.Players.LocalPlayer)
+	if pets then
+		for _, pet in pairs(pets) do
+			if pet and typeof(pet) == "table" and pet.cpet then
+				local mult = pet:CalculateSpeedMultiplier()
+				pet.speedMult = mult
+				pcall(function()
+					pet.cpet:Broadcast("petSpeedMult", mult)
+				end)
+			end
+		end
+	end
+end
+
+local PlayerPet = require(game.ReplicatedStorage.Library.Client.PlayerPet)
+if not _G.OriginalCalculateSpeedMultiplier then
+	_G.OriginalCalculateSpeedMultiplier = PlayerPet.CalculateSpeedMultiplier
+	PlayerPet.CalculateSpeedMultiplier = function(self)
+		if infPetsSpeed then
+			return 999999
+		end
+		return _G.OriginalCalculateSpeedMultiplier(self)
+	end
+end
+
+MiscTab:CreateToggle({
+	Name = "Infinite Pets Speed",
+	CurrentValue = false,
+	Flag = "InfPetsSpeed",
+	Callback = function(Value)
+		infPetsSpeed = Value
+		updateAllPetsSpeed()
 	end
 })
