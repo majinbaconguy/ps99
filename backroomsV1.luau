@@ -46,6 +46,7 @@ local scannedRooms = {}
 local scannedUIDs = {}
 local visitedAnchors = {}
 local scanRunning = false
+local scanCompleted = false
 
 local Window = Rayfield:CreateWindow({
 	Name = "Backrooms Scanner UI",
@@ -91,6 +92,26 @@ local AutoFindBestToggle = Tab:CreateToggle({
 	end,
 })
 
+local autoTPGauntlet = false
+local AutoTPGauntletToggle = Tab:CreateToggle({
+	Name = "Auto TP to Active Gauntlet Room",
+	CurrentValue = false,
+	Flag = "AutoTPGauntlet",
+	Callback = function(Value)
+		autoTPGauntlet = Value
+	end,
+})
+
+local autoTPTitanic = false
+local AutoTPTitanicToggle = Tab:CreateToggle({
+	Name = "Auto TP to Active Titanic Room",
+	CurrentValue = false,
+	Flag = "AutoTPTitanic",
+	Callback = function(Value)
+		autoTPTitanic = Value
+	end,
+})
+
 local function setHatchAnimation(enabled)
 	local pscripts = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerScripts")
 	local scripts = pscripts and pscripts:FindFirstChild("Scripts")
@@ -123,7 +144,7 @@ local HideHatchAnimationToggle = Tab:CreateToggle({
 	end,
 })
 
-local function getBestFreeEggRoom()
+local function getBestEggRoom()
 	local bestRoom = nil
 	local maxMult = -1
 	for _, room in ipairs(scannedRooms) do
@@ -144,6 +165,24 @@ local function getBestFreeEggRoom()
 	return bestRoom
 end
 
+local function getActiveTitanicRoom()
+	for _, room in ipairs(scannedRooms) do
+		if room.RoomID == "TitanicEggRoom" and room.IsActive then
+			return room
+		end
+	end
+	return nil
+end
+
+local function getActiveGauntletRoom()
+	for _, room in ipairs(scannedRooms) do
+		if room.RoomID == "GauntletEggRoom" and room.IsActive then
+			return room
+		end
+	end
+	return nil
+end
+
 local function findRoomModel(roomUID)
 	for _, child in ipairs(GeneratedBackrooms:GetChildren()) do
 		if child:GetAttribute("RoomUID") == roomUID then
@@ -162,9 +201,16 @@ local function teleportToRoom(room)
 			local targetCFrame = room.CFrame
 			local roomModel = findRoomModel(room.RoomUID)
 			if roomModel then
-				local sign = roomModel:WaitForChild("Sign", 3)
-				if sign and sign:IsA("BasePart") then
-					targetCFrame = sign.CFrame + Vector3.new(0, 3, 0)
+				local dest = roomModel:FindFirstChild("Sign")
+					or roomModel:FindFirstChild("EggPedestal")
+					or roomModel:FindFirstChild("Backrooms Egg")
+				if not dest then
+					dest = roomModel:WaitForChild("Sign", 0.5)
+						or roomModel:WaitForChild("EggPedestal", 0.5)
+						or roomModel:WaitForChild("Backrooms Egg", 0.5)
+				end
+				if dest then
+					targetCFrame = dest.CFrame + Vector3.new(0, 3, 0)
 				end
 			end
 			character:PivotTo(targetCFrame)
@@ -192,16 +238,77 @@ local function serverHop()
 end
 
 local BestButton = Tab:CreateButton({
-	Name = "Teleport to Best Free Egg Room",
+	Name = "Teleport to Best Egg Room",
 	Callback = function()
 		if scanRunning then return end
-		local room = getBestFreeEggRoom()
+		local room = getBestEggRoom()
 		if room then
 			teleportToRoom(room)
 		else
-			createMessage("No FreeEggRoom found. Server hopping...")
+			createMessage("No suitable EggRoom found. Server hopping...")
 			task.wait(1)
 			serverHop()
+		end
+	end,
+})
+
+local GauntletButton = Tab:CreateButton({
+	Name = "Teleport to Active Gauntlet Room",
+	Callback = function()
+		if scanRunning then return end
+		local room = getActiveGauntletRoom()
+		if room then
+			teleportToRoom(room)
+		else
+			createMessage("No active Gauntlet Room found. Server hopping...")
+			task.wait(1)
+			serverHop()
+		end
+	end,
+})
+
+local TitanicButton = Tab:CreateButton({
+	Name = "Teleport to Active Titanic Room",
+	Callback = function()
+		if scanRunning then return end
+		local room = getActiveTitanicRoom()
+		if room then
+			teleportToRoom(room)
+		else
+			createMessage("No active Titanic Room found. Server hopping...")
+			task.wait(1)
+			serverHop()
+		end
+	end,
+})
+
+local function getNearestBreakableRoom()
+	local character = getCharacter()
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
+	local closestRoom = nil
+	local minDist = math.huge
+	for _, room in ipairs(scannedRooms) do
+		if room.Name == "BreakableRoom" then
+			local dist = (room.Position - hrp.Position).Magnitude
+			if dist < minDist then
+				minDist = dist
+				closestRoom = room
+			end
+		end
+	end
+	return closestRoom
+end
+
+local BreakableButton = Tab:CreateButton({
+	Name = "Teleport to Nearest Breakable Room",
+	Callback = function()
+		if scanRunning then return end
+		local room = getNearestBreakableRoom()
+		if room then
+			teleportToRoom(room)
+		else
+			createMessage("No BreakableRoom found!")
 		end
 	end,
 })
@@ -278,12 +385,14 @@ task.spawn(function()
 						end)
 					end
 					for _, roomModel in ipairs(GeneratedBackrooms:GetChildren()) do
-						if roomModel.Name == "FreeEggRoom" then
-							local sign = roomModel:FindFirstChild("Sign")
-							if sign and sign:IsA("BasePart") then
-								local distToSign = (hrp.Position - sign.Position).Magnitude
-								if distToSign < 60 then
-									local targetCFrame = sign.CFrame + Vector3.new(0, 3, 0)
+						if roomModel.Name == "FreeEggRoom" or roomModel.Name == "GauntletEggRoom" or roomModel.Name == "TitanicEggRoom" then
+							local dest = roomModel:FindFirstChild("Sign")
+								or roomModel:FindFirstChild("EggPedestal")
+								or roomModel:FindFirstChild("Backrooms Egg")
+							if dest and dest:IsA("BasePart") then
+								local distToDest = (hrp.Position - dest.Position).Magnitude
+								if distToDest < 60 then
+									local targetCFrame = dest.CFrame + Vector3.new(0, 3, 0)
 									local distToTarget = (hrp.Position - targetCFrame.Position).Magnitude
 									if distToTarget > 8 then
 										hrp.Anchored = true
@@ -305,19 +414,33 @@ end)
 task.spawn(function()
 	while true do
 		task.wait(0.65)
-		if not scanRunning then
+		if not scanRunning and scanCompleted then
 			local targetRoom = nil
-			if autoFindBest then
-				targetRoom = getBestFreeEggRoom()
+			if autoTPTitanic then
+				targetRoom = getActiveTitanicRoom()
+				if not targetRoom then
+					createMessage("Active Titanic Room not found. Server hopping...")
+					task.wait(1)
+					serverHop()
+				end
+			elseif autoTPGauntlet then
+				targetRoom = getActiveGauntletRoom()
+				if not targetRoom then
+					createMessage("Active Gauntlet Room not found. Server hopping...")
+					task.wait(1)
+					serverHop()
+				end
+			elseif autoFindBest then
+				targetRoom = getBestEggRoom()
 			end
 			if targetRoom then
 				local character = getCharacter()
 				local hrp = character and character:FindFirstChild("HumanoidRootPart")
 				if hrp then
 					local roomModel = findRoomModel(targetRoom.RoomUID)
-					local sign = roomModel and roomModel:FindFirstChild("Sign")
-					if sign then
-						local dist = (hrp.Position - sign.Position).Magnitude
+					local dest = roomModel and (roomModel:FindFirstChild("Sign") or roomModel:FindFirstChild("EggPedestal") or roomModel:FindFirstChild("Backrooms Egg"))
+					if dest then
+						local dist = (hrp.Position - dest.Position).Magnitude
 						if dist > 60 then
 							teleportToRoom(targetRoom)
 						end
@@ -370,6 +493,10 @@ local function scanStreamedRooms()
 					eggName = eggDir.name or eggDir._id or ""
 				end
 			end
+			local isActive = false
+			if room.Name == "GauntletEggRoom" or room.Name == "TitanicEggRoom" then
+				isActive = room:FindFirstChild("ChestTimer") ~= nil
+			end
 			if not existing then
 				local floorPos = landingSpot(room) + Vector3.new(0, 4, 0)
 				local roomCFrame = CFrame.new(floorPos)
@@ -384,16 +511,21 @@ local function scanStreamedRooms()
 					RoomUID = roomUID,
 					RoomID = room:GetAttribute("RoomID"),
 					EggMultiplier = tonumber(room:GetAttribute("EggMultiplier")) or 1,
-					LockedRoom = room:GetAttribute("LockedRoom"),
+					LockedRoom = room:GetAttribute("LockedRoom") or room:FindFirstChild("LockedDoors") ~= nil,
 					DeepRoom = room:GetAttribute("DeepRoom"),
-					EggName = eggName
+					EggName = eggName,
+					IsActive = isActive
 				})
 				scannedUIDs[roomUID] = true
-				print("Scanned: " .. room.Name .. " | UID: " .. tostring(roomUID) .. (eggName and (" | Egg: " .. eggName) or ""))
+				print("Scanned: " .. room.Name .. " | UID: " .. tostring(roomUID) .. (eggName and (" | Egg: " .. eggName) or "") .. (isActive and " | ACTIVE" or ""))
 			else
 				if existing.RoomID == "FreeEggRoom" and existing.EggName == nil and eggName ~= nil then
 					existing.EggName = eggName
 					print("Updated EggName for Room " .. tostring(roomUID) .. ": " .. eggName)
+				end
+				if (existing.RoomID == "GauntletEggRoom" or existing.RoomID == "TitanicEggRoom") and existing.IsActive ~= isActive then
+					existing.IsActive = isActive
+					print("Updated IsActive for " .. existing.RoomID .. " " .. tostring(roomUID) .. ": " .. tostring(isActive))
 				end
 			end
 		end
@@ -439,12 +571,31 @@ local function runBypassScanner()
 	print("Scan complete. Total rooms: " .. #scannedRooms)
 	StatusLabel:Set("Status: Scan Complete (" .. #scannedRooms .. " rooms)")
 	game.Debris:AddItem(message, 0)
-	if autoFindBest then
-		local room = getBestFreeEggRoom()
+	scanCompleted = true
+	if autoTPTitanic then
+		local room = getActiveTitanicRoom()
 		if room then
 			teleportToRoom(room)
 		else
-			createMessage("Best FreeEggRoom not found. Server hopping...")
+			createMessage("Active Titanic Room not found. Server hopping...")
+			task.wait(1)
+			serverHop()
+		end
+	elseif autoTPGauntlet then
+		local room = getActiveGauntletRoom()
+		if room then
+			teleportToRoom(room)
+		else
+			createMessage("Active Gauntlet Room not found. Server hopping...")
+			task.wait(1)
+			serverHop()
+		end
+	elseif autoFindBest then
+		local room = getBestEggRoom()
+		if room then
+			teleportToRoom(room)
+		else
+			createMessage("Best EggRoom not found. Server hopping...")
 			task.wait(1)
 			serverHop()
 		end
