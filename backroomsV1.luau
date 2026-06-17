@@ -38,6 +38,7 @@ local Network = require(game.ReplicatedStorage.Library.Client.Network)
 local CustomEggsCmds = require(game.ReplicatedStorage.Library.Client.CustomEggsCmds)
 local EggCmds = require(game.ReplicatedStorage.Library.Client.EggCmds)
 local MiscItem = require(game.ReplicatedStorage.Library.Items.MiscItem)
+local PlayerPet = require(game.ReplicatedStorage.Library.Client.PlayerPet)
 
 local activeFolder = workspace:WaitForChild("__THINGS"):WaitForChild("__INSTANCE_CONTAINER"):WaitForChild("Active")
 local backroomsFolder = activeFolder:WaitForChild("Backrooms")
@@ -48,6 +49,7 @@ local scannedUIDs = {}
 local visitedAnchors = {}
 local scanRunning = false
 local scanCompleted = false
+local tpRunning = false
 
 local Window = Rayfield:CreateWindow({
 	Name = "PS99 Backrooms Script",
@@ -65,6 +67,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 local Tab = Window:CreateTab("Main", 4483362458)
+local MiniBossTab = Window:CreateTab("Mini Boss", 4483362458)
 local StatusLabel = Tab:CreateLabel("Status: Idle")
 
 local selectedEggType = "Any"
@@ -87,6 +90,7 @@ local autoFindBest = false
 local AutoFindBestToggle
 local AutoTPGauntletToggle
 local AutoTPTitanicToggle
+local AutoFarmMiniBossToggle
 
 AutoFindBestToggle = Tab:CreateToggle({
 	Name = "Auto TP to Best Egg",
@@ -97,6 +101,7 @@ AutoFindBestToggle = Tab:CreateToggle({
 		if Value then
 			if AutoTPGauntletToggle then AutoTPGauntletToggle:Set(false) end
 			if AutoTPTitanicToggle then AutoTPTitanicToggle:Set(false) end
+			if AutoFarmMiniBossToggle then AutoFarmMiniBossToggle:Set(false) end
 		end
 	end,
 })
@@ -111,6 +116,7 @@ AutoTPGauntletToggle = Tab:CreateToggle({
 		if Value then
 			if AutoFindBestToggle then AutoFindBestToggle:Set(false) end
 			if AutoTPTitanicToggle then AutoTPTitanicToggle:Set(false) end
+			if AutoFarmMiniBossToggle then AutoFarmMiniBossToggle:Set(false) end
 		end
 	end,
 })
@@ -125,6 +131,7 @@ AutoTPTitanicToggle = Tab:CreateToggle({
 		if Value then
 			if AutoFindBestToggle then AutoFindBestToggle:Set(false) end
 			if AutoTPGauntletToggle then AutoTPGauntletToggle:Set(false) end
+			if AutoFarmMiniBossToggle then AutoFarmMiniBossToggle:Set(false) end
 		end
 	end,
 })
@@ -200,6 +207,15 @@ local function getActiveGauntletRoom()
 	return nil
 end
 
+local function getActiveMiniBossRoom()
+	for _, room in ipairs(scannedRooms) do
+		if room.RoomID == "MiniBossRoom" or room.Name == "MiniBossRoom" then
+			return room
+		end
+	end
+	return nil
+end
+
 local function findRoomModel(roomUID)
 	for _, child in ipairs(GeneratedBackrooms:GetChildren()) do
 		if child:GetAttribute("RoomUID") == roomUID then
@@ -233,18 +249,25 @@ local function unlockRoomDoors(roomUID, isDeepRoom)
 end
 
 local function teleportToRoom(room)
+	if tpRunning then return end
+	tpRunning = true
 	local character = getCharacter()
 	if character and room then
 		local hrp = character:FindFirstChild("HumanoidRootPart")
 		if hrp then
 			hrp.Anchored = true
+			local roofCFrame = room.ScanCFrame or room.CFrame
 			local roomModel = findRoomModel(room.RoomUID)
 			if roomModel then
 				local cf, size = roomModel:GetBoundingBox()
 				local roofY = cf.Position.Y + size.Y / 2
-				local roofCFrame = CFrame.new(cf.Position.X, roofY + 10, cf.Position.Z)
-				character:PivotTo(roofCFrame)
-				task.wait(0.5)
+				roofCFrame = CFrame.new(cf.Position.X, roofY + 10, cf.Position.Z)
+			end
+			Network.Fire("RequestStreaming", roofCFrame.Position)
+			character:PivotTo(roofCFrame)
+			task.wait(0.65)
+			roomModel = findRoomModel(room.RoomUID)
+			if roomModel then
 				if room.RoomID == "FreeEggRoom" or room.Name == "FreeEggRoom" then
 					local dest = roomModel:FindFirstChild("Sign") or roomModel:WaitForChild("Sign", 0.5)
 					if dest then
@@ -283,6 +306,16 @@ local function teleportToRoom(room)
 					else
 						character:PivotTo(room.CFrame)
 					end
+				elseif room.RoomID == "MiniBossRoom" or room.Name == "MiniBossRoom" then
+					local lockedDoors = roomModel:FindFirstChild("LockedDoors")
+					local door = lockedDoors and lockedDoors:FindFirstChild("Door")
+					if door then
+						character:PivotTo(door:GetPivot())
+						task.wait(0.25)
+					end
+					unlockRoomDoors(room.RoomUID, room.DeepRoom)
+					task.wait(0.15)
+					character:PivotTo(room.CFrame)
 				else
 					character:PivotTo(room.CFrame)
 				end
@@ -293,6 +326,7 @@ local function teleportToRoom(room)
 			hrp.Anchored = false
 		end
 	end
+	tpRunning = false
 end
 
 local function serverHop()
@@ -315,7 +349,7 @@ end
 local BestButton = Tab:CreateButton({
 	Name = "Teleport to Best Egg Room",
 	Callback = function()
-		if scanRunning then return end
+		if scanRunning or tpRunning then return end
 		local room = getBestEggRoom()
 		if room then
 			teleportToRoom(room)
@@ -330,7 +364,7 @@ local BestButton = Tab:CreateButton({
 local GauntletButton = Tab:CreateButton({
 	Name = "Teleport to Active Gauntlet Room",
 	Callback = function()
-		if scanRunning then return end
+		if scanRunning or tpRunning then return end
 		local room = getActiveGauntletRoom()
 		if room then
 			teleportToRoom(room)
@@ -345,7 +379,7 @@ local GauntletButton = Tab:CreateButton({
 local TitanicButton = Tab:CreateButton({
 	Name = "Teleport to Active Titanic Room",
 	Callback = function()
-		if scanRunning then return end
+		if scanRunning or tpRunning then return end
 		local room = getActiveTitanicRoom()
 		if room then
 			teleportToRoom(room)
@@ -378,12 +412,41 @@ end
 local BreakableButton = Tab:CreateButton({
 	Name = "Teleport to Nearest Breakable Room",
 	Callback = function()
-		if scanRunning then return end
+		if scanRunning or tpRunning then return end
 		local room = getNearestBreakableRoom()
 		if room then
 			teleportToRoom(room)
 		else
 			createMessage("No BreakableRoom found!")
+		end
+	end,
+})
+
+local autoFarmMiniBoss = false
+
+AutoFarmMiniBossToggle = MiniBossTab:CreateToggle({
+	Name = "Auto Farm Mini Boss",
+	CurrentValue = false,
+	Flag = "AutoFarmMiniBoss",
+	Callback = function(Value)
+		autoFarmMiniBoss = Value
+		if Value then
+			if AutoFindBestToggle then AutoFindBestToggle:Set(false) end
+			if AutoTPGauntletToggle then AutoTPGauntletToggle:Set(false) end
+			if AutoTPTitanicToggle then AutoTPTitanicToggle:Set(false) end
+		end
+	end,
+})
+
+local MiniBossButton = MiniBossTab:CreateButton({
+	Name = "Teleport to Mini Boss Room",
+	Callback = function()
+		if scanRunning or tpRunning then return end
+		local room = getActiveMiniBossRoom()
+		if room then
+			teleportToRoom(room)
+		else
+			createMessage("Mini Boss Room not found!")
 		end
 	end,
 })
@@ -448,7 +511,7 @@ end
 task.spawn(function()
 	while true do
 		task.wait(0.5)
-		if autoHatchEnabled and not scanRunning then
+		if autoHatchEnabled and not scanRunning and not tpRunning then
 			local character = getCharacter()
 			if character then
 				local hrp = character:FindFirstChild("HumanoidRootPart")
@@ -499,7 +562,7 @@ end)
 task.spawn(function()
 	while true do
 		task.wait(0.85)
-		if not scanRunning and scanCompleted then
+		if not scanRunning and scanCompleted and not tpRunning then
 			local targetRoom = nil
 			if autoTPTitanic then
 				targetRoom = getActiveTitanicRoom()
@@ -710,6 +773,85 @@ task.spawn(function()
 	end
 end)
 
+task.spawn(function()
+	while true do
+		task.wait(0.25)
+		if autoFarmMiniBoss and not scanRunning and not tpRunning then
+			local room = getActiveMiniBossRoom()
+			if room then
+				local roomModel = findRoomModel(room.RoomUID)
+				if roomModel then
+					local character = getCharacter()
+					local hrp = character and character:FindFirstChild("HumanoidRootPart")
+					if hrp then
+						local cf, size = roomModel:GetBoundingBox()
+						local roomCenter = cf.Position
+						local distToRoom = (hrp.Position - roomCenter).Magnitude
+						if distToRoom > 130 then
+							teleportToRoom(room)
+							task.wait(1)
+						else
+							local targetBreakable = nil
+							local breakables = workspace.__THINGS.Breakables:GetChildren()
+							for _, b in ipairs(breakables) do
+								local bId = b:GetAttribute("BreakableID")
+								if bId == "Daydream Mimic Chest" then
+									local bPos = b:GetPivot().Position
+									if (bPos - roomCenter).Magnitude < 130 then
+										targetBreakable = b
+										break
+									end
+								end
+							end
+							if not targetBreakable then
+								for _, b in ipairs(breakables) do
+									local bId = b:GetAttribute("BreakableID")
+									if bId == "Daydream Mimic Boss" then
+										local bPos = b:GetPivot().Position
+										if (bPos - roomCenter).Magnitude < 130 then
+											targetBreakable = b
+											break
+										end
+									end
+								end
+							end
+							if targetBreakable then
+								local bUID = targetBreakable:GetAttribute("BreakableUID")
+								local bPos = targetBreakable:GetPivot().Position
+								character:MoveTo(bPos)
+								Network.UnreliableFire("Breakables_PlayerDealDamage", bUID)
+								local activePets = PlayerPet.GetByPlayer(LocalPlayer)
+								for _, pet in pairs(activePets) do
+									if pet.cpet then
+										pet:SetTarget(targetBreakable)
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
 task.wait(1.5)
+
+task.spawn(function()
+	local pscripts = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerScripts")
+	local scripts = pscripts and pscripts:FindFirstChild("Scripts")
+	local gameScripts = scripts and scripts:FindFirstChild("Core")
+	local idleTracking = gameScripts and gameScripts:FindFirstChild("Idle Tracking")
+	if idleTracking and idleTracking:IsA("LocalScript") then
+		idleTracking.Enabled = false
+	end
+	local vu = game:GetService("VirtualUser")
+	game:GetService("Players").LocalPlayer.Idled:Connect(function()
+		vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+		task.wait(1)
+		vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+	end)
+end)
+
 runBypassScanner()
 Rayfield:LoadConfiguration()
