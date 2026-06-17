@@ -26,6 +26,10 @@ local function getCharacter()
 end
 
 local function createMessage(msg)
+	if workspace:FindFirstChildOfClass("Message") then
+		return
+	end
+	
 	local message = Instance.new("Message", workspace)
 	message.Text = msg
 	return message
