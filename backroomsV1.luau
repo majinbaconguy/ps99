@@ -37,6 +37,7 @@ local InstancingCmds = require(game.ReplicatedStorage.Library.Client.InstancingC
 local Network = require(game.ReplicatedStorage.Library.Client.Network)
 local CustomEggsCmds = require(game.ReplicatedStorage.Library.Client.CustomEggsCmds)
 local EggCmds = require(game.ReplicatedStorage.Library.Client.EggCmds)
+local MiscItem = require(game.ReplicatedStorage.Library.Items.MiscItem)
 
 local activeFolder = workspace:WaitForChild("__THINGS"):WaitForChild("__INSTANCE_CONTAINER"):WaitForChild("Active")
 local backroomsFolder = activeFolder:WaitForChild("Backrooms")
@@ -83,32 +84,48 @@ local EggDropdown = Tab:CreateDropdown({
 })
 
 local autoFindBest = false
-local AutoFindBestToggle = Tab:CreateToggle({
+local AutoFindBestToggle
+local AutoTPGauntletToggle
+local AutoTPTitanicToggle
+
+AutoFindBestToggle = Tab:CreateToggle({
 	Name = "Auto TP to Best Egg",
 	CurrentValue = false,
 	Flag = "AutoFindBest",
 	Callback = function(Value)
 		autoFindBest = Value
+		if Value then
+			if AutoTPGauntletToggle then AutoTPGauntletToggle:Set(false) end
+			if AutoTPTitanicToggle then AutoTPTitanicToggle:Set(false) end
+		end
 	end,
 })
 
 local autoTPGauntlet = false
-local AutoTPGauntletToggle = Tab:CreateToggle({
+AutoTPGauntletToggle = Tab:CreateToggle({
 	Name = "Auto TP to Active Gauntlet Room",
 	CurrentValue = false,
 	Flag = "AutoTPGauntlet",
 	Callback = function(Value)
 		autoTPGauntlet = Value
+		if Value then
+			if AutoFindBestToggle then AutoFindBestToggle:Set(false) end
+			if AutoTPTitanicToggle then AutoTPTitanicToggle:Set(false) end
+		end
 	end,
 })
 
 local autoTPTitanic = false
-local AutoTPTitanicToggle = Tab:CreateToggle({
+AutoTPTitanicToggle = Tab:CreateToggle({
 	Name = "Auto TP to Active Titanic Room",
 	CurrentValue = false,
 	Flag = "AutoTPTitanic",
 	Callback = function(Value)
 		autoTPTitanic = Value
+		if Value then
+			if AutoFindBestToggle then AutoFindBestToggle:Set(false) end
+			if AutoTPGauntletToggle then AutoTPGauntletToggle:Set(false) end
+		end
 	end,
 })
 
@@ -192,29 +209,85 @@ local function findRoomModel(roomUID)
 	return nil
 end
 
+local function unlockRoomDoors(roomUID, isDeepRoom)
+	local roomModel = findRoomModel(roomUID)
+	if not roomModel then return end
+	local LockedDoors = roomModel:FindFirstChild("LockedDoors")
+	if not LockedDoors then return end
+	local isLocked = false
+	for _, child in ipairs(LockedDoors:GetChildren()) do
+		local Lock = child:FindFirstChild("Lock")
+		if Lock and Lock.Transparency < 0.5 then
+			isLocked = true
+			break
+		end
+	end
+	if not isLocked then return end
+	local keyItem = MiscItem(isDeepRoom and "Deep Backrooms Crayon Key" or "Backrooms Crayon Key")
+	if keyItem and keyItem:HasAny() then
+		local activeInstance = InstancingCmds.Get()
+		if activeInstance then
+			activeInstance:FireCustom("AbstractRoom_FireServer", roomUID, "UnlockDoors")
+		end
+	end
+end
+
 local function teleportToRoom(room)
 	local character = getCharacter()
 	if character and room then
 		local hrp = character:FindFirstChild("HumanoidRootPart")
 		if hrp then
 			hrp.Anchored = true
-			local targetCFrame = room.CFrame
 			local roomModel = findRoomModel(room.RoomUID)
 			if roomModel then
-				local dest = roomModel:FindFirstChild("Sign")
-					or roomModel:FindFirstChild("EggPedestal")
-					or roomModel:FindFirstChild("Backrooms Egg")
-				if not dest then
-					dest = roomModel:WaitForChild("Sign", 0.5)
-						or roomModel:WaitForChild("EggPedestal", 0.5)
-						or roomModel:WaitForChild("Backrooms Egg", 0.5)
+				local cf, size = roomModel:GetBoundingBox()
+				local roofY = cf.Position.Y + size.Y / 2
+				local roofCFrame = CFrame.new(cf.Position.X, roofY + 10, cf.Position.Z)
+				character:PivotTo(roofCFrame)
+				task.wait(0.5)
+				if room.RoomID == "FreeEggRoom" or room.Name == "FreeEggRoom" then
+					local dest = roomModel:FindFirstChild("Sign") or roomModel:WaitForChild("Sign", 0.5)
+					if dest then
+						character:PivotTo(dest:GetPivot() + Vector3.new(0, 3, 0))
+					end
+				elseif room.RoomID == "GauntletEggRoom" or room.Name == "GauntletEggRoom" then
+					local lockedDoors = roomModel:FindFirstChild("LockedDoors")
+					local door = lockedDoors and lockedDoors:FindFirstChild("Door")
+					if door then
+						character:PivotTo(door:GetPivot())
+					end
+					unlockRoomDoors(room.RoomUID, room.DeepRoom)
+					task.wait(0.15)
+					local dest = roomModel:FindFirstChild("EggPedestal") or roomModel:WaitForChild("EggPedestal", 0.5)
+					if dest then
+						character:PivotTo(dest:GetPivot() + Vector3.new(0, 2.5, 0))
+					end
+				elseif room.RoomID == "TitanicEggRoom" or room.Name == "TitanicEggRoom" then
+					local lockedDoors = roomModel:FindFirstChild("LockedDoors")
+					local door = lockedDoors and lockedDoors:FindFirstChild("Door")
+					if door then
+						character:PivotTo(door:GetPivot())
+					end
+					unlockRoomDoors(room.RoomUID, room.DeepRoom)
+					task.wait(0.15)
+					local dest = roomModel:FindFirstChild("FeatureAnchor") or roomModel:WaitForChild("FeatureAnchor", 0.5)
+					if dest then
+						character:PivotTo(dest:GetPivot())
+					end
+				elseif room.RoomID == "BreakableRoom" or room.Name == "BreakableRoom" then
+					local dest = roomModel:FindFirstChild("BREAK_ZONE") or roomModel:WaitForChild("BREAK_ZONE", 0.5)
+					if dest then
+						character:PivotTo(dest:GetPivot() + Vector3.new(0, 5, 0))
+					else
+						character:PivotTo(room.CFrame)
+					end
+				else
+					character:PivotTo(room.CFrame)
 				end
-				if dest then
-					targetCFrame = dest.CFrame + Vector3.new(0, 3, 0)
-				end
+			else
+				character:PivotTo(room.CFrame)
 			end
-			character:PivotTo(targetCFrame)
-			task.wait(0.3)
+			task.wait(0.15)
 			hrp.Anchored = false
 		end
 	end
@@ -372,7 +445,7 @@ end
 
 task.spawn(function()
 	while true do
-		task.wait(0.35)
+		task.wait(0.5)
 		if autoHatchEnabled and not scanRunning then
 			local character = getCharacter()
 			if character then
@@ -386,13 +459,23 @@ task.spawn(function()
 					end
 					for _, roomModel in ipairs(GeneratedBackrooms:GetChildren()) do
 						if roomModel.Name == "FreeEggRoom" or roomModel.Name == "GauntletEggRoom" or roomModel.Name == "TitanicEggRoom" then
-							local dest = roomModel:FindFirstChild("Sign")
-								or roomModel:FindFirstChild("EggPedestal")
-								or roomModel:FindFirstChild("Backrooms Egg")
-							if dest and dest:IsA("BasePart") then
-								local distToDest = (hrp.Position - dest.Position).Magnitude
+							local dest = nil
+							local offset = Vector3.new(0, 3, 0)
+							if roomModel.Name == "FreeEggRoom" then
+								dest = roomModel:FindFirstChild("Sign")
+								offset = Vector3.new(0, 3, 0)
+							elseif roomModel.Name == "GauntletEggRoom" then
+								dest = roomModel:FindFirstChild("EggPedestal")
+								offset = Vector3.new(0, 2.5, 0)
+							elseif roomModel.Name == "TitanicEggRoom" then
+								dest = roomModel:FindFirstChild("FeatureAnchor")
+								offset = Vector3.new(0, 0, 0)
+							end
+							if dest then
+								local destPos = dest:GetPivot().Position
+								local distToDest = (hrp.Position - destPos).Magnitude
 								if distToDest < 60 then
-									local targetCFrame = dest.CFrame + Vector3.new(0, 3, 0)
+									local targetCFrame = dest:GetPivot() + offset
 									local distToTarget = (hrp.Position - targetCFrame.Position).Magnitude
 									if distToTarget > 8 then
 										hrp.Anchored = true
@@ -413,7 +496,7 @@ end)
 
 task.spawn(function()
 	while true do
-		task.wait(0.65)
+		task.wait(0.85)
 		if not scanRunning and scanCompleted then
 			local targetRoom = nil
 			if autoTPTitanic then
@@ -440,7 +523,7 @@ task.spawn(function()
 					local roomModel = findRoomModel(targetRoom.RoomUID)
 					local dest = roomModel and (roomModel:FindFirstChild("Sign") or roomModel:FindFirstChild("EggPedestal") or roomModel:FindFirstChild("Backrooms Egg"))
 					if dest then
-						local dist = (hrp.Position - dest.Position).Magnitude
+						local dist = (hrp.Position - dest:GetPivot().Position).Magnitude
 						if dist > 60 then
 							teleportToRoom(targetRoom)
 						end
@@ -499,10 +582,10 @@ local function scanStreamedRooms()
 			end
 			if not existing then
 				local floorPos = landingSpot(room) + Vector3.new(0, 4, 0)
-				local roomCFrame = CFrame.new(floorPos)
 				local cf, size = room:GetBoundingBox()
 				local roofY = cf.Position.Y + size.Y / 2
 				local scanCFrame = CFrame.new(floorPos.X, roofY + 10, floorPos.Z)
+				local roomCFrame = CFrame.new(cf.Position + Vector3.new(0, 15, 0))
 				table.insert(scannedRooms, {
 					Name = room.Name,
 					Position = roomCFrame.Position,
@@ -625,5 +708,6 @@ task.spawn(function()
 	end
 end)
 
+task.wait(1.5)
+runBypassScanner()
 Rayfield:LoadConfiguration()
-task.delay(1.5, runBypassScanner)
