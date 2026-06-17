@@ -811,9 +811,12 @@ task.spawn(function()
 				if hrp then
 					local roomModel = findRoomModel(room.RoomUID)
 					local inRoom = false
+					local roomCenter = room.Position
 					if roomModel then
-						local cf, size = roomModel:GetBoundingBox()
-						local roomCenter = cf.Position
+						local breakZone = roomModel:FindFirstChild("BREAK_ZONE")
+						if breakZone then
+							roomCenter = breakZone.Position
+						end
 						local distToRoom = (hrp.Position - roomCenter).Magnitude
 						if distToRoom <= 130 then
 							inRoom = true
@@ -823,8 +826,6 @@ task.spawn(function()
 						teleportToRoom(room)
 						task.wait(1)
 					else
-						local cf, size = roomModel:GetBoundingBox()
-						local roomCenter = cf.Position
 						local targetBreakable = nil
 						local breakables = workspace.__THINGS.Breakables:GetChildren()
 						for _, b in ipairs(breakables) do
