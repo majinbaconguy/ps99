@@ -1,15 +1,17 @@
 task.spawn(function()
-	local StarterPlayer = game:GetService("StarterPlayer")
-	local StarterPlayerScripts = StarterPlayer:WaitForChild("StarterPlayerScripts", 5)
-	local scripts = StarterPlayerScripts and StarterPlayerScripts:WaitForChild("Scripts", 5)
-	local gameScripts = scripts and scripts:FindFirstChild("Core")
-	local idleTracking = gameScripts and gameScripts:FindFirstChild("Idle Tracking")
-	if idleTracking and idleTracking:IsA("LocalScript") then
-		idleTracking.Enabled = false
-		warn("DISABLED IDLE TRACKING")
-	else
-		warn("CANT FIND IDLE TRACKING")
-	end
+	pcall(function()
+		local StarterPlayer = game:GetService("StarterPlayer")
+		local StarterPlayerScripts = StarterPlayer:WaitForChild("StarterPlayerScripts", 5)
+		local scripts = StarterPlayerScripts and StarterPlayerScripts:WaitForChild("Scripts", 5)
+		local gameScripts = scripts and scripts:FindFirstChild("Core")
+		local idleTracking = gameScripts and gameScripts:FindFirstChild("Idle Tracking")
+		if idleTracking and idleTracking:IsA("LocalScript") then
+			idleTracking.Enabled = false
+			warn("DISABLED IDLE TRACKING")
+		else
+			warn("CANT FIND IDLE TRACKING")
+		end
+	end)
 end)
 
 if not game:IsLoaded() then
@@ -70,6 +72,7 @@ local GeneratedBackrooms = backroomsFolder:WaitForChild("GeneratedBackrooms")
 local scannedRooms = {}
 local scannedUIDs = {}
 local visitedAnchors = {}
+local connectedTimers = {}
 local scanRunning = false
 local scanCompleted = false
 local tpRunning = false
@@ -213,20 +216,7 @@ local function getBestEggRoom()
 	return bestRoom
 end
 
-local function updateRoomExpirations()
-	local serverTime = workspace:GetServerTimeNow()
-	for _, room in ipairs(scannedRooms) do
-		if room.EggExpireTimestamp and serverTime >= room.EggExpireTimestamp then
-			if room.IsActive then
-				room.IsActive = false
-				print("Room " .. tostring(room.RoomUID) .. " expired at server time " .. tostring(room.EggExpireTimestamp))
-			end
-		end
-	end
-end
-
 local function getActiveTitanicRoom()
-	updateRoomExpirations()
 	for _, room in ipairs(scannedRooms) do
 		if room.RoomID == "TitanicEggRoom" and room.IsActive then
 			return room
@@ -236,7 +226,6 @@ local function getActiveTitanicRoom()
 end
 
 local function getActiveGauntletRoom()
-	updateRoomExpirations()
 	for _, room in ipairs(scannedRooms) do
 		if room.RoomID == "GauntletEggRoom" and room.IsActive then
 			return room
@@ -489,19 +478,6 @@ AutoFarmMiniBossToggle = MiniBossTab:CreateToggle({
 	end,
 })
 
-local MiniBossButton = MiniBossTab:CreateButton({
-	Name = "Teleport to Mini Boss Room",
-	Callback = function()
-		if scanRunning or tpRunning then return end
-		local room = getActiveMiniBossRoom()
-		if room then
-			teleportToRoom(room)
-		else
-			createMessage("Mini Boss Room not found!")
-		end
-	end,
-})
-
 local autoBuyUpgrades = false
 local AutoBuyUpgradesToggle = MiniBossTab:CreateToggle({
 	Name = "Auto Buy Backrooms Upgrades",
@@ -626,20 +602,6 @@ local function canAffordUpgrade(upgrade)
 end
 
 local function scanStreamedRooms()
-	local expiryMap = {}
-	local activeInstance = InstancingCmds.Get()
-	if activeInstance then
-		pcall(function()
-			local dataList = activeInstance:InvokeCustom("AbstractRoom_GetPlayerData")
-			if type(dataList) == "table" then
-				for _, v in ipairs(dataList) do
-					if v.uid and v.data and v.data.EggExpireTimestamp then
-						expiryMap[v.uid] = v.data.EggExpireTimestamp
-					end
-				end
-			end
-		end)
-	end
 	for _, room in ipairs(GeneratedBackrooms:GetChildren()) do
 		local roomUID = room:GetAttribute("RoomUID")
 		if roomUID then
@@ -660,7 +622,27 @@ local function scanStreamedRooms()
 			local isActive = false
 			if room.Name == "GauntletEggRoom" or room.Name == "TitanicEggRoom" then
 				local timer = room:FindFirstChild("ChestTimer")
-				isActive = timer ~= nil and timer.Enabled == true
+				if timer then
+					if not connectedTimers[timer] then
+						connectedTimers[timer] = true
+						timer.Destroying:Connect(function()
+							connectedTimers[timer] = nil
+							if room.Parent ~= nil then
+								local rEntry = nil
+								for _, r in ipairs(scannedRooms) do
+									if r.RoomUID == roomUID then
+										rEntry = r
+										break
+									end
+								end
+								if rEntry then
+									rEntry.IsActive = false
+								end
+							end
+						end)
+					end
+					isActive = true
+				end
 			end
 			if not existing then
 				local floorPos = landingSpot(room) + Vector3.new(0, 4, 0)
@@ -679,13 +661,11 @@ local function scanStreamedRooms()
 					LockedRoom = room:GetAttribute("LockedRoom") or room:FindFirstChild("LockedDoors") ~= nil,
 					DeepRoom = room:GetAttribute("DeepRoom"),
 					EggName = eggName,
-					IsActive = isActive,
-					EggExpireTimestamp = expiryMap[roomUID]
+					IsActive = isActive
 				})
 				scannedUIDs[roomUID] = true
 				print("Scanned: " .. room.Name .. " | UID: " .. tostring(roomUID) .. (eggName and (" | Egg: " .. eggName) or "") .. (isActive and " | ACTIVE" or ""))
 			else
-				existing.EggExpireTimestamp = expiryMap[roomUID] or existing.EggExpireTimestamp
 				if existing.RoomID == "FreeEggRoom" and existing.EggName == nil and eggName ~= nil then
 					existing.EggName = eggName
 					print("Updated EggName for Room " .. tostring(roomUID) .. ": " .. eggName)
@@ -966,15 +946,6 @@ end)
 task.spawn(function()
 	while true do
 		task.wait(2)
-		if not scanRunning then
-			pcall(scanStreamedRooms)
-		end
-	end
-end)
-
-task.spawn(function()
-	while true do
-		task.wait(2)
 		if autoBuyUpgrades and not serverHopping then
 			local tracks = {
 				EventUpgrades.BackroomsBossDamage,
@@ -997,6 +968,15 @@ game:GetService("Players").LocalPlayer.Idled:Connect(function()
 	vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
 	task.wait(1)
 	vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(2)
+		if not scanRunning then
+			pcall(scanStreamedRooms)
+		end
+	end
 end)
 
 task.wait(1.5)
