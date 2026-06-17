@@ -6,7 +6,9 @@ task.spawn(function()
 	local idleTracking = gameScripts and gameScripts:FindFirstChild("Idle Tracking")
 	if idleTracking and idleTracking:IsA("LocalScript") then
 		idleTracking.Enabled = false
-		print("DISABLED IDLE TRACKING")
+		warn("DISABLED IDLE TRACKING")
+	else
+		warn("CANT FIND IDLE TRACKING")
 	end
 end)
 
