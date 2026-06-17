@@ -529,99 +529,6 @@ local function getNearestEgg(hrp)
 	return closestEgg
 end
 
-task.spawn(function()
-	while true do
-		task.wait(0.5)
-		if autoHatchEnabled and not scanRunning and not tpRunning then
-			local character = getCharacter()
-			if character then
-				local hrp = character:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					local egg = getNearestEgg(hrp)
-					if egg then
-						pcall(function()
-							Network.Invoke("CustomEggs_Hatch", egg._uid, EggCmds.GetMaxHatch(egg._dir))
-						end)
-					end
-					for _, roomModel in ipairs(GeneratedBackrooms:GetChildren()) do
-						if roomModel.Name == "FreeEggRoom" or roomModel.Name == "GauntletEggRoom" or roomModel.Name == "TitanicEggRoom" then
-							local dest = nil
-							local offset = Vector3.new(0, 3, 0)
-							if roomModel.Name == "FreeEggRoom" then
-								dest = roomModel:FindFirstChild("Sign")
-								offset = Vector3.new(0, 3, 0)
-							elseif roomModel.Name == "GauntletEggRoom" then
-								dest = roomModel:FindFirstChild("EggPedestal")
-								offset = Vector3.new(0, 2.5, 0)
-							elseif roomModel.Name == "TitanicEggRoom" then
-								dest = roomModel:FindFirstChild("FeatureAnchor")
-								offset = Vector3.new(0, 0, 0)
-							end
-							if dest then
-								local destPos = dest:GetPivot().Position
-								local distToDest = (hrp.Position - destPos).Magnitude
-								if distToDest < 60 then
-									local targetCFrame = dest:GetPivot() + offset
-									local distToTarget = (hrp.Position - targetCFrame.Position).Magnitude
-									if distToTarget > 8 then
-										hrp.Anchored = true
-										character:PivotTo(targetCFrame)
-										task.wait(0.1)
-										hrp.Anchored = false
-									end
-									break
-								end
-							end
-						end
-					end
-				end
-			end
-		end
-	end
-end)
-
-task.spawn(function()
-	while true do
-		task.wait(0.85)
-		if not scanRunning and scanCompleted and not tpRunning then
-			local targetRoom = nil
-			if autoTPTitanic then
-				targetRoom = getActiveTitanicRoom()
-				if not targetRoom then
-					createMessage("Active Titanic Room not found. Server hopping...")
-					task.wait(1)
-					serverHop()
-				end
-			elseif autoTPGauntlet then
-				targetRoom = getActiveGauntletRoom()
-				if not targetRoom then
-					createMessage("Active Gauntlet Room not found. Server hopping...")
-					task.wait(1)
-					serverHop()
-				end
-			elseif autoFindBest then
-				targetRoom = getBestEggRoom()
-			end
-			if targetRoom then
-				local character = getCharacter()
-				local hrp = character and character:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					local roomModel = findRoomModel(targetRoom.RoomUID)
-					local dest = roomModel and (roomModel:FindFirstChild("Sign") or roomModel:FindFirstChild("EggPedestal") or roomModel:FindFirstChild("Backrooms Egg"))
-					if dest then
-						local dist = (hrp.Position - dest:GetPivot().Position).Magnitude
-						if dist > 60 then
-							teleportToRoom(targetRoom)
-						end
-					else
-						teleportToRoom(targetRoom)
-					end
-				end
-			end
-		end
-	end
-end)
-
 local function getEggDirForRoom(roomModel)
 	local sign = roomModel:FindFirstChild("Sign")
 	if not sign then
@@ -793,9 +700,93 @@ end
 
 task.spawn(function()
 	while true do
-		task.wait(2)
-		if not scanRunning then
-			pcall(scanStreamedRooms)
+		task.wait(0.5)
+		if autoHatchEnabled and not scanRunning and not tpRunning then
+			local character = getCharacter()
+			if character then
+				local hrp = character:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local egg = getNearestEgg(hrp)
+					if egg then
+						pcall(function()
+							Network.Invoke("CustomEggs_Hatch", egg._uid, EggCmds.GetMaxHatch(egg._dir))
+						end)
+					end
+					for _, roomModel in ipairs(GeneratedBackrooms:GetChildren()) do
+						if roomModel.Name == "FreeEggRoom" or roomModel.Name == "GauntletEggRoom" or roomModel.Name == "TitanicEggRoom" then
+							local dest = nil
+							local offset = Vector3.new(0, 3, 0)
+							if roomModel.Name == "FreeEggRoom" then
+								dest = roomModel:FindFirstChild("Sign")
+								offset = Vector3.new(0, 3, 0)
+							elseif roomModel.Name == "GauntletEggRoom" then
+								dest = roomModel:FindFirstChild("EggPedestal")
+								offset = Vector3.new(0, 2.5, 0)
+							elseif roomModel.Name == "TitanicEggRoom" then
+								dest = roomModel:FindFirstChild("FeatureAnchor")
+								offset = Vector3.new(0, 0, 0)
+							end
+							if dest then
+								local destPos = dest:GetPivot().Position
+								local distToDest = (hrp.Position - destPos).Magnitude
+								if distToDest < 60 then
+									local targetCFrame = dest:GetPivot() + offset
+									local distToTarget = (hrp.Position - targetCFrame.Position).Magnitude
+									if distToTarget > 8 then
+										hrp.Anchored = true
+										character:PivotTo(targetCFrame)
+										task.wait(0.1)
+										hrp.Anchored = false
+									end
+									break
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(0.85)
+		if not scanRunning and scanCompleted and not tpRunning then
+			local targetRoom = nil
+			if autoTPTitanic then
+				targetRoom = getActiveTitanicRoom()
+				if not targetRoom then
+					createMessage("Active Titanic Room not found. Server hopping...")
+					task.wait(1)
+					serverHop()
+				end
+			elseif autoTPGauntlet then
+				targetRoom = getActiveGauntletRoom()
+				if not targetRoom then
+					createMessage("Active Gauntlet Room not found. Server hopping...")
+					task.wait(1)
+					serverHop()
+				end
+			elseif autoFindBest then
+				targetRoom = getBestEggRoom()
+			end
+			if targetRoom then
+				local character = getCharacter()
+				local hrp = character and character:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local roomModel = findRoomModel(targetRoom.RoomUID)
+					local dest = roomModel and (roomModel:FindFirstChild("Sign") or roomModel:FindFirstChild("EggPedestal") or roomModel:FindFirstChild("Backrooms Egg"))
+					if dest then
+						local dist = (hrp.Position - dest:GetPivot().Position).Magnitude
+						if dist > 60 then
+							teleportToRoom(targetRoom)
+						end
+					else
+						teleportToRoom(targetRoom)
+					end
+				end
+			end
 		end
 	end
 end)
@@ -868,6 +859,15 @@ task.spawn(function()
 					end
 				end
 			end
+		end
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(2)
+		if not scanRunning then
+			pcall(scanStreamedRooms)
 		end
 	end
 end)
