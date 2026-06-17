@@ -818,7 +818,10 @@ task.spawn(function()
 							if targetBreakable then
 								local bUID = targetBreakable:GetAttribute("BreakableUID")
 								local bPos = targetBreakable:GetPivot().Position
-								character:MoveTo(bPos)
+								local humanoid = character:FindFirstChildOfClass("Humanoid")
+								if humanoid then
+									humanoid:MoveTo(bPos)
+								end
 								Network.UnreliableFire("Breakables_PlayerDealDamage", bUID)
 								local activePets = PlayerPet.GetByPlayer(LocalPlayer)
 								for _, pet in pairs(activePets) do
