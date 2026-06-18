@@ -689,7 +689,7 @@ BreakablesRoomTPButton = MiniBossTab:CreateButton({
 					if character then
 						local rootPart = character:FindFirstChild("HumanoidRootPart")
 						if rootPart then
-							rootPart:PivotTo(breakableZone + Vector3.new(0, 3, 0))
+							rootPart:PivotTo(CFrame.new(breakableZone.Position) + Vector3.new(0, 3, 0))
 						end
 					end
 				end
