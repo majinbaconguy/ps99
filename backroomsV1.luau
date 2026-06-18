@@ -33,7 +33,7 @@ local Window = Rayfield:CreateWindow({
 	DisableRayfieldPrompts = false,
 	DisableBuildWarnings = false,
 	ConfigurationSaving = {
-		Enabled = false,
+		Enabled = true,
 		FolderName = "BackroomsPS99",
 		FileName = "Config"
 	},
@@ -341,6 +341,11 @@ local function Scan()
 
 	StatusLabel:Set("Status: Scanning...")
 
+	while #GeneratedBackrooms:GetChildren() < 5 do
+		task.wait(0.5)
+		warn("WAITING...")
+	end
+
 	local function run()
 		for _, room in ipairs(GeneratedBackrooms:GetChildren()) do
 			local roomUID = room:GetAttribute("RoomUID")
@@ -364,7 +369,7 @@ local function Scan()
 						CFrame = roomCFrame,
 						Position = roomCFrame.Position
 					})
-					StatusLabel:Set("Status: Scanned " .. #_G.ScannedRooms .. " rooms.")
+					StatusLabel:Set("Status: Scanned " .. #_G.ScannedRooms .. " rooms")
 					Network.Fire("RequestStreaming", roomCFrame.Position)
 				end
 			end
@@ -399,6 +404,7 @@ local function Scan()
 		_G.VistedRooms[room.uid] = true
 		rootPart.Anchored = true
 		TeleportToRoom(room.Model, true)
+		task.wait(0.35)
 
 		if room.Id == "MiniBossRoom" then
 			warn("FOUND: " .. room.Id)
@@ -646,7 +652,6 @@ DisableHatchAnimation = Tab:CreateToggle({
 		if workspace.CurrentCamera:FindFirstChild("Eggs") or workspace.CurrentCamera:FindFirstChild("Pets") then
 			return
 		end
-		
 
 		local scripts = localPlayer:WaitForChild("PlayerScripts")
 		local scriptInstance = nil
