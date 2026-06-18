@@ -297,15 +297,18 @@ local function TeleportToRoom(roomModel)
 		if roomModel.Name == "TitanicEggRoom" or roomModel.Name == "GauntletEggRoom" then
 			local timerBillboard = roomModel:FindFirstChild("ChestTimer")
 			if timerBillboard ~= nil then
-				local roomData = findRoomDataByUID(roomUID)
-				if roomData ~= nil then
-					local minutes, seconds = string.match(timerBillboard.Text, "(%d+):(%d+)")
-					if minutes and seconds then
-						roomData.ExpireTime = workspace:GetServerTimeNow() + (tonumber(minutes) * 60) + tonumber(seconds)
-						print((tonumber(minutes) * 60) + tonumber(seconds), "seconds left")
+				local timerText = timerBillboard:FindFirstChild("Timer")
+				if timerText ~= nil then
+					local roomData = findRoomDataByUID(roomUID)
+					if roomData ~= nil then
+						local minutes, seconds = string.match(timerText.Text, "(%d+):(%d+)")
+						if minutes and seconds then
+							roomData.ExpireTime = workspace:GetServerTimeNow() + (tonumber(minutes) * 60) + tonumber(seconds)
+							print((tonumber(minutes) * 60) + tonumber(seconds), "seconds left")
+						end
+					else
+						warn("no room data")
 					end
-				else
-					warn("no room data")
 				end
 			else
 				warn("doesnt exist")
