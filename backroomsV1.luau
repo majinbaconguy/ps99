@@ -33,7 +33,7 @@ local Window = Rayfield:CreateWindow({
 	DisableRayfieldPrompts = false,
 	DisableBuildWarnings = false,
 	ConfigurationSaving = {
-		Enabled = false,
+		Enabled = true,
 		FolderName = "BackroomsPS99",
 		FileName = "Config"
 	},
@@ -255,7 +255,7 @@ local function UnlockRoom(roomUID)
 	end
 end
 
-local function TeleportToRoom(roomModel, ignore)
+local function TeleportToRoom(roomModel)
 	if _G.Teleporting then
 		return
 	end
@@ -291,8 +291,23 @@ local function TeleportToRoom(roomModel, ignore)
 
 	task.wait(0.3)
 
-	if (not ignore) and (roomModel.Name == "TitanicEggRoom" or roomModel.Name == "GauntletEggRoom" or roomModel.Name == "MiniBossRoom") then
+	if roomModel.Name == "TitanicEggRoom" or roomModel.Name == "GauntletEggRoom" or roomModel.Name == "MiniBossRoom" then
 		UnlockRoom(roomUID)
+		
+		if roomModel.Name == "TitanicEggRoom" or roomModel.Name == "GauntletEggRoom" then
+			local timerBillboard = roomModel:FindFirstChild("ChestTimer")
+			if timerBillboard ~= nil then
+				local timerText = timerBillboard.Text -- timer looks like this: "12:30", basically 12 minutes and 30 seconds
+				local roomData = findRoomDataByUID(roomUID)
+				if roomData ~= nil then
+					--TODO add an expire time data for the roomdata (roomData.ExpireTime)
+				else
+					warn("no room data")
+				end
+			else
+				warn("doesnt exist")
+			end
+		end
 	end
 
 	local dest = roomModel:FindFirstChild("Sign")
@@ -301,30 +316,10 @@ local function TeleportToRoom(roomModel, ignore)
 		or roomModel:FindFirstChildWhichIsA("BasePart", true)
 
 	local targetCF = dest and dest:GetPivot() or CFrame.new(pos)
+
 	rootPart:PivotTo(targetCF + Vector3.new(0, 3, 0))
+
 	rootPart.Anchored = false
-	
-	if (not ignore) and (roomModel.Name == "TitanicEggRoom" or roomModel.Name == "GauntletEggRoom") then
-		task.wait(0.5)
-		local timerBillboard = roomModel:FindFirstChild("ChestTimer")
-		if timerBillboard ~= nil then
-			local timerText = timerBillboard:FindFirstChild("Timer")
-			if timerText ~= nil then
-				local roomData = findRoomDataByUID(roomUID)
-				if roomData ~= nil then
-					local minutes, seconds = string.match(timerText.Text, "(%d+):(%d+)")
-					if minutes and seconds then
-						roomData.ExpireTime = workspace:GetServerTimeNow() + (tonumber(minutes) * 60) + tonumber(seconds)
-						print((tonumber(minutes) * 60) + tonumber(seconds), "seconds left")
-					end
-				else
-					warn("no room data")
-				end
-			end
-		else
-			warn("doesnt exist")
-		end
-	end
 
 	_G.Teleporting = false
 end
@@ -397,7 +392,7 @@ local function Scan()
 
 		_G.VistedRooms[room.uid] = true
 		rootPart.Anchored = true
-		TeleportToRoom(room.Model, true)
+		TeleportToRoom(room.Model)
 
 		if room.Id == "MiniBossRoom" then
 			warn("FOUND: " .. room.Id)
@@ -415,6 +410,7 @@ local function Scan()
 
 				warn("FOUND: " .. room.Id .. " with multiplier: " .. mult .. "x | Egg: " .. room.EggName)
 			end
+			task.wait(0.5)
 		end
 
 		if room.Id == "GauntletEggRoom" or room.Id == "TitanicEggRoom" then
@@ -429,6 +425,7 @@ local function Scan()
 				warn("FOUND: " .. room.Id)
 				room.IsActive = true
 			end
+			task.wait(0.5)
 		end
 
 		rootPart.Anchored = false
@@ -998,19 +995,6 @@ task.spawn(function()
 			serverHop("No Boss Room in this server. hopping...")
 			task.wait(5)
 		end 
-	end
-end)
-
-task.spawn(function()
-	while true do
-		task.wait(1)
-		
-		for _, roomData in ipairs(_G.ScannedRooms) do
-			if roomData.IsActive ~= nil and roomData.ExpireTime ~= nil and roomData.ExpireTime < workspace:GetServerTimeNow() then
-				roomData.IsActive = nil
-				warn("Expired " .. roomData.Id)
-			end
-		end
 	end
 end)
 
