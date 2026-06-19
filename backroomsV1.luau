@@ -389,12 +389,16 @@ local function Scan()
 						continue
 					end
 					
+					print(roomId)
+					
 					if roomId == "MiniBossRoom" then
 						warn("FOUND: " .. roomId)
 					end
 
 					if roomId == "FreeEggRoom" then
 						TeleportToRoom(room, true)
+						task.wait(1.5)
+						
 						local eggDir = getEggDirForRoom(room)
 						local mult = room:GetAttribute("EggMultiplier") or 0
 
@@ -404,11 +408,13 @@ local function Scan()
 
 							warn("FOUND: " .. roomId .. " with multiplier: " .. mult .. "x | Egg: " .. currentRoomData.EggName)
 						end
+						
 						task.wait(1.5)
 					end
 
 					if roomId == "GauntletEggRoom" or roomId == "TitanicEggRoom" then
 						TeleportToRoom(room, true)
+						task.wait(1.5)
 
 						local eggUID = room:GetAttribute("EggUID")
 						local chestTimer = room:FindFirstChild("ChestTimer")
@@ -419,6 +425,7 @@ local function Scan()
 							warn("FOUND: " .. roomId)
 							currentRoomData.IsActive = true
 						end
+						
 						task.wait(1.5)
 					end
 				end
