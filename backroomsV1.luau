@@ -215,6 +215,14 @@ local function getBestEggRoom()
 	return bestRoom
 end
 
+local function canUnlockDoor()
+	local keyItem = MiscItem("Backrooms Crayon Key")
+	if keyItem and keyItem:HasAny() then
+		return true
+	end
+	return false
+end
+
 local function UnlockRoom(roomUID)
 	local character = getCharacter()
 	if not character then
@@ -250,12 +258,14 @@ local function UnlockRoom(roomUID)
 		return 
 	end
 
-	local keyItem = MiscItem("Backrooms Crayon Key")
-	if keyItem and keyItem:HasAny() then
+	local canUnlock = canUnlockDoor()
+	if canUnlock then
 		local activeInstance = InstancingCmds.Get()
 		if activeInstance then
 			activeInstance:FireCustom("AbstractRoom_FireServer", roomUID, "UnlockDoors")
 		end
+	else
+		warn("player has no keys")
 	end
 end
 
@@ -319,7 +329,7 @@ local function TeleportToRoom(roomModel, ignore)
 	rootPart.Anchored = false
 
 	if (not ignore) and (roomId == "TitanicEggRoom" or roomId == "GauntletEggRoom") then
-		task.wait(0.75)
+		task.wait(1.25)
 		local timerBillboard = roomModel:FindFirstChild("ChestTimer")
 		if timerBillboard ~= nil then
 			local timerText = timerBillboard:FindFirstChild("Timer")
@@ -561,6 +571,17 @@ GauntletTPButton = Tab:CreateButton({
 		if (not canDoAction()) then
 			return
 		end
+		
+		local canUnlock = canUnlockDoor()
+		if not canUnlock then
+			Rayfield:Notify({
+				Title = "No Key",
+				Content = "You need a daydream key in order to TP here",
+				Duration = 4,
+				Image = 4483362458
+			})
+			return
+		end
 
 		local found = false
 		for _, r in ipairs(_G.ScannedRooms) do
@@ -586,6 +607,17 @@ TitanicTPButton = Tab:CreateButton({
 	Name = "Teleport to Titanic Egg!",
 	Callback = function()
 		if (not canDoAction()) then
+			return
+		end
+		
+		local canUnlock = canUnlockDoor()
+		if not canUnlock then
+			Rayfield:Notify({
+				Title = "No Key",
+				Content = "You need a daydream key in order to TP here",
+				Duration = 4,
+				Image = 4483362458
+			})
 			return
 		end
 
@@ -617,6 +649,17 @@ AutoGauntletEggToggle = Tab:CreateToggle({
 		if (not canDoAction()) then
 			return
 		end
+		
+		local canUnlock = canUnlockDoor()
+		if not canUnlock then
+			Rayfield:Notify({
+				Title = "No Key",
+				Content = "You need a daydream key in order to TP here",
+				Duration = 4,
+				Image = 4483362458
+			})
+			return
+		end
 
 		if value then
 			if AutoBestEgg ~= nil then
@@ -642,6 +685,17 @@ AutoTitanicEggToggle = Tab:CreateToggle({
 	Flag = "AutoTPTitanic",
 	Callback = function(value)
 		if (not canDoAction()) then
+			return
+		end
+		
+		local canUnlock = canUnlockDoor()
+		if not canUnlock then
+			Rayfield:Notify({
+				Title = "No Key",
+				Content = "You need a daydream key in order to TP here",
+				Duration = 4,
+				Image = 4483362458
+			})
 			return
 		end
 
@@ -750,6 +804,17 @@ MiniBossTPButton = MiniBossTab:CreateButton({
 		if (not canDoAction()) then
 			return
 		end
+		
+		local canUnlock = canUnlockDoor()
+		if not canUnlock then
+			Rayfield:Notify({
+				Title = "No Key",
+				Content = "You need a daydream key in order to TP here",
+				Duration = 4,
+				Image = 4483362458
+			})
+			return
+		end
 
 		local found = false
 		for _, r in ipairs(_G.ScannedRooms) do
@@ -777,6 +842,17 @@ AutoFarmMiniBoss = MiniBossTab:CreateToggle({
 	Flag = "AutoFarmBoss",
 	Callback = function(value)
 		if (not canDoAction()) then
+			return
+		end
+		
+		local canUnlock = canUnlockDoor()
+		if not canUnlock then
+			Rayfield:Notify({
+				Title = "No Key",
+				Content = "You need a daydream key in order to TP here",
+				Duration = 4,
+				Image = 4483362458
+			})
 			return
 		end
 
@@ -853,7 +929,11 @@ task.spawn(function()
 	while true do
 		task.wait(0.5)
 		
-		if not _G.AutoTPGauntlet or _G.CurrentGauntletRoom ~= nil then
+		if _G.CurrentGauntletRoom ~= nil then
+			continue
+		end
+		
+		if not _G.AutoTPGauntlet then
 			continue
 		end
 
@@ -907,8 +987,12 @@ end)
 task.spawn(function()
 	while true do
 		task.wait(0.5)
+		
+		if _G.CurrentTitanicRoom ~= nil then
+			continue
+		end
 
-		if not _G.AutoTPTitanic or _G.CurrentTitanicRoom ~= nil then
+		if not _G.AutoTPTitanic then
 			continue
 		end
 
