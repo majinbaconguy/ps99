@@ -347,11 +347,11 @@ local function Scan()
 
 	_G.IsScanning = true
 
-	local message = createMessage("Exploring backrooms instance. TIP: put your graphics at MAX! Atlest 250 rooms need to be scanned...")
+	local message = createMessage("Exploring backrooms instance... (stops at 200 rooms scanned)")
 
 	StatusLabel:Set("Status: Scanning...")
 
-	while #GeneratedBackrooms:GetChildren() < 5 do
+	while #GeneratedBackrooms:GetChildren() < 1 do
 		task.wait(0.5)
 		warn("WAITING...")
 	end
@@ -389,7 +389,7 @@ local function Scan()
 	run()
 
 	while true do
-		if #_G.ScannedRooms >= 250 then
+		if #_G.ScannedRooms >= 200 then
 			break
 		end
 		
