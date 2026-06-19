@@ -55,6 +55,9 @@ _G.AutoTPGauntlet = false
 _G.AutoTPTitanic = false
 _G.AutoMiniBoss = false
 
+_G.CurrentGauntletRoom = nil
+_G.CurrentTitanicRoom = nil
+
 local EggDropdown
 local FreeEggTPButton
 local AutoBestEgg
@@ -265,11 +268,13 @@ local function TeleportToRoom(roomModel, ignore)
 
 	local character = getCharacter()
 	if not character then
+		_G.Teleporting = false
 		return
 	end
 
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not rootPart then
+		_G.Teleporting = false
 		return
 	end
 
@@ -292,7 +297,10 @@ local function TeleportToRoom(roomModel, ignore)
 
 	task.wait(0.3)
 
-	if (not ignore) and (roomModel.Name == "TitanicEggRoom" or roomModel.Name == "GauntletEggRoom" or roomModel.Name == "MiniBossRoom") then
+	local roomData = findRoomDataByUID(roomUID)
+	local roomId = roomData and roomData.Id or roomModel.Name
+
+	if (not ignore) and (roomId == "TitanicEggRoom" or roomId == "GauntletEggRoom" or roomId == "MiniBossRoom") then
 		UnlockRoom(roomUID)
 	end
 
@@ -304,14 +312,13 @@ local function TeleportToRoom(roomModel, ignore)
 	local targetCF = dest and dest:GetPivot() or CFrame.new(pos)
 	rootPart:PivotTo(targetCF + Vector3.new(0, 3, 0))
 	rootPart.Anchored = false
-	
-	if (not ignore) and (roomModel.Name == "TitanicEggRoom" or roomModel.Name == "GauntletEggRoom") then
+
+	if (not ignore) and (roomId == "TitanicEggRoom" or roomId == "GauntletEggRoom") then
 		task.wait(0.5)
 		local timerBillboard = roomModel:FindFirstChild("ChestTimer")
 		if timerBillboard ~= nil then
 			local timerText = timerBillboard:FindFirstChild("Timer")
 			if timerText ~= nil then
-				local roomData = findRoomDataByUID(roomUID)
 				if roomData ~= nil then
 					local minutes, seconds = string.match(timerText.Text, "(%d+):(%d+)")
 					if minutes and seconds then
@@ -324,6 +331,9 @@ local function TeleportToRoom(roomModel, ignore)
 			end
 		else
 			warn("doesnt exist")
+			if roomData then
+				roomData.IsActive = nil
+			end
 		end
 	end
 
@@ -379,6 +389,10 @@ local function Scan()
 	run()
 
 	while true do
+		if #_G.ScannedRooms >= 250 then
+			break
+		end
+		
 		local character = getCharacter()
 		if not character then
 			continue
@@ -818,6 +832,7 @@ task.spawn(function()
 		task.wait(0.5)
 
 		if not _G.AutoTPGauntlet then
+			_G.CurrentGauntletRoom = nil
 			continue
 		end
 
@@ -835,14 +850,32 @@ task.spawn(function()
 			continue
 		end
 
-		local targetRoom = nil
-		for _, r in ipairs(_G.ScannedRooms) do
-			if r.Id == "GauntletEggRoom" and r.IsActive ~= nil then
-				targetRoom = r
-				break
+		if _G.CurrentGauntletRoom then
+			local stillActive = false
+			for _, r in ipairs(_G.ScannedRooms) do
+				if r.uid == _G.CurrentGauntletRoom.uid then
+					if r.IsActive ~= nil then
+						stillActive = true
+					end
+					break
+				end
+			end
+			if not stillActive then
+				warn("Gauntlet room " .. tostring(_G.CurrentGauntletRoom.uid) .. " expired. Seeking next active...")
+				_G.CurrentGauntletRoom = nil
 			end
 		end
 
+		if not _G.CurrentGauntletRoom then
+			for _, r in ipairs(_G.ScannedRooms) do
+				if r.Id == "GauntletEggRoom" and r.IsActive ~= nil then
+					_G.CurrentGauntletRoom = r
+					break
+				end
+			end
+		end
+
+		local targetRoom = _G.CurrentGauntletRoom
 		if targetRoom then
 			local eggPedestal = targetRoom.Model:FindFirstChild("EggPedestal")
 			if eggPedestal then
@@ -860,7 +893,7 @@ task.spawn(function()
 				end
 			end
 		else
-			serverHop("No Gauntlet Egg in this server. hopping...")
+			serverHop("No active Gauntlet Egg in this server. hopping...")
 			task.wait(5)
 		end
 	end
@@ -871,6 +904,7 @@ task.spawn(function()
 		task.wait(0.5)
 
 		if not _G.AutoTPTitanic then
+			_G.CurrentTitanicRoom = nil
 			continue
 		end
 
@@ -888,14 +922,32 @@ task.spawn(function()
 			continue
 		end
 
-		local targetRoom = nil
-		for _, r in ipairs(_G.ScannedRooms) do
-			if r.Id == "TitanicEggRoom" and r.IsActive ~= nil then
-				targetRoom = r
-				break
+		if _G.CurrentTitanicRoom then
+			local stillActive = false
+			for _, r in ipairs(_G.ScannedRooms) do
+				if r.uid == _G.CurrentTitanicRoom.uid then
+					if r.IsActive ~= nil then
+						stillActive = true
+					end
+					break
+				end
+			end
+			if not stillActive then
+				warn("Titanic room " .. tostring(_G.CurrentTitanicRoom.uid) .. " expired. Seeking next active...")
+				_G.CurrentTitanicRoom = nil
 			end
 		end
 
+		if not _G.CurrentTitanicRoom then
+			for _, r in ipairs(_G.ScannedRooms) do
+				if r.Id == "TitanicEggRoom" and r.IsActive ~= nil then
+					_G.CurrentTitanicRoom = r
+					break
+				end
+			end
+		end
+
+		local targetRoom = _G.CurrentTitanicRoom
 		if targetRoom then
 			local eggPedestal = targetRoom.Model:FindFirstChild("EggPedestal")
 			if eggPedestal then
@@ -913,7 +965,7 @@ task.spawn(function()
 				end
 			end
 		else
-			serverHop("No Titanic Egg in this server. hopping...")
+			serverHop("No active Titanic Egg in this server. hopping...")
 			task.wait(5)
 		end
 	end
@@ -1049,7 +1101,7 @@ end)
 task.spawn(function()
 	while true do
 		task.wait(1)
-		
+
 		for _, roomData in ipairs(_G.ScannedRooms) do
 			if roomData.IsActive ~= nil and roomData.ExpireTime ~= nil and roomData.ExpireTime < workspace:GetServerTimeNow() then
 				roomData.IsActive = nil
