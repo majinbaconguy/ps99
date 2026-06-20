@@ -1,3 +1,5 @@
+-- buggy
+
 if not game:IsLoaded() then
 	game.Loaded:Wait()
 end
@@ -18,8 +20,6 @@ local MiscItem = require(game.ReplicatedStorage.Library.Items.MiscItem)
 local EggCmds = require(game.ReplicatedStorage.Library.Client.EggCmds)
 local CustomEggsCmds = require(game.ReplicatedStorage.Library.Client.CustomEggsCmds)
 local PlayerPet = require(game.ReplicatedStorage.Library.Client.PlayerPet)
-local InventoryCmds = require(game.ReplicatedStorage.Library.Client.InventoryCmds)
-local CurrencyCmds = require(game.ReplicatedStorage.Library.Client.CurrencyCmds)
 
 local localPlayer = Players.LocalPlayer
 
