@@ -141,8 +141,8 @@ local function scanAndSnipe()
 						if price <= 21000000 and (rap > 0 and price < rap) then
 							foundAny = true
 							local elapsed = os.clock() - lastPurchaseTime
-							if elapsed < 3 then
-								task.wait(3 - elapsed)
+							if elapsed < 1 then
+								task.wait(1 - elapsed)
 							end
 							lastPurchaseTime = os.clock()
 							
