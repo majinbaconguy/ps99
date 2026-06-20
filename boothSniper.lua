@@ -119,8 +119,11 @@ local function scanAndSnipe()
 		repeat
 			booths = Network.Invoke("Booths_GetInitialState")
 			task.wait(.5)
+			warn("are we deadass")
 		until booths ~= nil
 	end
+	
+	warn(booths)
 
 	local foundAny = false
 	for _, packet in ipairs(booths) do
@@ -128,6 +131,7 @@ local function scanAndSnipe()
 		if success and decoded then
 			local sellerId = decoded.PlayerID
 			if sellerId == localPlayer.UserId then
+				warn("no bro")
 				continue
 			end
 			
@@ -144,6 +148,7 @@ local function scanAndSnipe()
 							local elapsed = os.clock() - lastPurchaseTime
 							if elapsed < 1 then
 								task.wait(1 - elapsed)
+								warn("1 sec wait?")
 							end
 							lastPurchaseTime = os.clock()
 							
@@ -171,6 +176,7 @@ task.spawn(function()
 			serverHop()
 			break
 		end
+		warn("check", found)
 		task.wait(2.5)
 	end
 end)
