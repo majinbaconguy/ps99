@@ -34,7 +34,7 @@ local enterPosition = nil
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 local Window = Rayfield:CreateWindow({
-	Name = "PS99 Backrooms Script",
+	Name = "PS99 Backrooms Script V3",
 	LoadingTitle = "Loading...",
 	LoadingSubtitle = "by Pirate Games",
 	Theme = "Default",
