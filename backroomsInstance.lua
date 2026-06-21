@@ -126,12 +126,23 @@ end
 
 _G.ExecutedScript = true
 
-local activeFolder = workspace:WaitForChild("__THINGS")
-	:WaitForChild("__INSTANCE_CONTAINER")
-	:WaitForChild("Active")
+local function getRooms()
+	local activeFolder = workspace:WaitForChild("__THINGS")
+		:WaitForChild("__INSTANCE_CONTAINER")
+		:WaitForChild("Active")
 
-local backroomsFolder = activeFolder:WaitForChild("Backrooms")
-local GeneratedBackrooms = backroomsFolder:WaitForChild("GeneratedBackrooms")
+	local backroomsFolder = activeFolder:WaitForChild("Backrooms")
+	if not backroomsFolder then
+		return nil
+	end
+	
+	local generatedBackrooms = backroomsFolder:WaitForChild("GeneratedBackrooms")
+	if generatedBackrooms then
+		return generatedBackrooms
+	end
+	
+	return nil
+end
 
 local function findRoomDataByUID(roomUID)
 	for _, roomData in ipairs(_G.ScannedRooms) do
@@ -143,11 +154,18 @@ local function findRoomDataByUID(roomUID)
 end
 
 local function findRoomModelByUID(roomUID)
-	for _, roomModel in ipairs(GeneratedBackrooms:GetChildren()) do
+	local generatedBackrooms = getRooms()
+	if not generatedBackrooms then
+		warn("⚠️ NO ROOMS (FUNCTION CALL)")
+		return nil
+	end
+	
+	for _, roomModel in ipairs(generatedBackrooms:GetChildren()) do
 		if roomModel:GetAttribute("RoomUID") == roomUID then
 			return roomModel
 		end
 	end
+	
 	return nil
 end
 
@@ -405,15 +423,26 @@ local function Scan()
 	StatusLabel:Set("Status: Scanning...")
 	
 	repeat
+		local generatedBackrooms = getRooms()
+		if not generatedBackrooms then
+			warn("⚠️ NO ROOMS (LOADING CALL)")
+			break
+		end
 		task.wait(0.5)
-	until #GeneratedBackrooms:GetChildren() > 0
+	until #generatedBackrooms:GetChildren() > 0
 	
 	local function TPtoSpawn()
+		local generatedBackrooms = getRooms()
+		if not generatedBackrooms then
+			warn("⚠️ NO ROOMS (TP CALL)")
+			return
+		end
+		
 		local character = getCharacter()
 		local activeInstance = InstancingCmds.Get()
 		if character and activeInstance then
 			if typeof(enterPosition) ~= "Vector3" then
-				local spawnRoom = GeneratedBackrooms:WaitForChild("DeepSpawnRoom", 5)
+				local spawnRoom = generatedBackrooms:WaitForChild("DeepSpawnRoom", 5)
 				if spawnRoom then
 					local spawnLocation = spawnRoom:FindFirstChild("DEEP_SPAWN_LOCATION")
 					if spawnLocation then
@@ -436,7 +465,13 @@ local function Scan()
 	TPtoSpawn()
 
 	local function run()
-		for _, room in ipairs(GeneratedBackrooms:GetChildren()) do
+		local generatedBackrooms = getRooms()
+		if not generatedBackrooms then
+			warn("⚠️ NO ROOMS")
+			return
+		end
+		
+		for _, room in ipairs(generatedBackrooms:GetChildren()) do
 			if room.Name == "Walls" then
 				room:Destroy()
 			end
@@ -451,8 +486,10 @@ local function Scan()
 							break
 						end
 					end
+					
 					local roomId = room:GetAttribute("RoomID")
 					local roomCFrame = room:GetPivot()
+					
 					if not existing then
 						local roomData = {
 							uid = roomUID,
@@ -470,8 +507,6 @@ local function Scan()
 							warn("didnt update")
 							continue
 						end
-
-						print(roomId)
 
 						if roomId == "GameMastersStage" then
 							warn("FOUND SPECIAL ROOM: " .. roomId)
@@ -517,7 +552,7 @@ local function Scan()
 	run()
 
 	while true do
-		if #_G.ScannedRooms >= 250 then
+		if #_G.ScannedRooms >= 400 then
 			break
 		end
 
@@ -529,6 +564,7 @@ local function Scan()
 		if not character then
 			continue
 		end
+		
 		local rootPart = character:FindFirstChild("HumanoidRootPart")
 		if not rootPart then
 			continue
@@ -592,6 +628,15 @@ AutoBestEgg = Tab:CreateToggle({
 		if (not canDoAction()) then
 			return
 		end
+		
+		if value then
+			if AutoFarmBoss ~= nil then
+				AutoFarmBoss:Set(false)
+			end
+			if AutoLockedEgg ~= nil then
+				AutoLockedEgg:Set(false)
+			end
+		end
 
 		_G.AutoTPBestEgg = value
 	end,
@@ -640,6 +685,15 @@ AutoLockedEgg = Tab:CreateToggle({
 	Callback = function(value)
 		if (not canDoAction()) then
 			return
+		end
+		
+		if value then
+			if AutoFarmBoss ~= nil then
+				AutoFarmBoss:Set(false)
+			end
+			if AutoBestEgg ~= nil then
+				AutoBestEgg:Set(false)
+			end
 		end
 
 		_G.AutoTPLockedEgg = value
@@ -1028,11 +1082,15 @@ end)
 
 task.spawn(function()
 	while true do
-		for _, room in ipairs(GeneratedBackrooms:GetChildren()) do
-			if room.Name == "Walls" then
-				room:Destroy()
+		local generatedBackrooms = getRooms()
+		if generatedBackrooms then
+			for _, room in ipairs(generatedBackrooms:GetChildren()) do
+				if room.Name == "Walls" then
+					room:Destroy()
+				end
 			end
 		end
+		
 		task.wait(1)
 	end
 end)
@@ -1043,6 +1101,6 @@ localPlayer.Idled:Connect(function()
 	VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
 end)
 
-task.wait(2)
+task.wait(2) -- DO NOT REMOVE
 Scan()
 Rayfield:LoadConfiguration()
