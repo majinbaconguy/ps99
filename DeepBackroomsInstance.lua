@@ -144,11 +144,22 @@ end
 _G.ExecutedScript = true
 
 local function getGeneratedBackrooms()
-	local things = workspace:FindFirstChild("__THINGS")
-	local container = things and things:FindFirstChild("__INSTANCE_CONTAINER")
-	local active = container and container:FindFirstChild("Active")
-	local backrooms = active and active:FindFirstChild("Backrooms")
-	return backrooms and backrooms:FindFirstChild("GeneratedBackrooms")
+	local container = workspace:FindFirstChild("__THINGS"):FindFirstChild("__INSTANCE_CONTAINER")
+	if not container then
+		return nil
+	end
+	
+	local active = container:FindFirstChild("Active")
+	if not active then
+		return nil
+	end
+	
+	local backrooms = active:WaitForChild("Backrooms", 3)
+	if not backrooms then
+		return nil
+	end
+	
+	return backrooms:FindFirstChild("GeneratedBackrooms")
 end
 
 local function findRoomDataByUID(roomUID)
@@ -444,11 +455,8 @@ local function Scan()
 	repeat
 		task.wait(0.5)
 		local folder = getGeneratedBackrooms()
-		if not folder then
-			break
-		end
 		warn("WAITING...")
-	until #folder:GetChildren() > 0
+	until folder ~= nil and #folder:GetChildren() > 0
 	
 	CleanupWalls()
 	
