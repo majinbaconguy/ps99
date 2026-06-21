@@ -1,10 +1,3 @@
--- UNFINISHED BEING TESTED
--- BOSS ROOMS ARENT FULLY TESTED SINCE I'VE NOT FOUND ANY
--- GameMastersOffice SAME AS LOCKED ROOM???
--- IVE FIGURED OUT HOW ANOMALYS WORK, WILL DO THAT SOON
-
--- IF YOU COMPLETE THE REST OF THE SCRIPT OR WANT TO ASK QUESTIONS DM ME ON DISCORD @sebastianpro124343
-
 if not game:IsLoaded() then
 	game.Loaded:Wait()
 end
@@ -71,6 +64,8 @@ local LockedEggTPButton
 local AutoLockedEgg
 local AutoHatch
 local DisableHatchAnimation
+local BreakablesRoomTPButton
+local DeepChestRoomTPButton
 local BossTPButton
 local AutoFarmBoss
 
@@ -219,9 +214,11 @@ local function getBestLockedEggRoom()
 
 	for _, room in ipairs(_G.ScannedRooms) do
 		if room.Id == "DeepLockedEggRoom" and room.EggMultiplier ~= nil then
-			if room.EggMultiplier > maxMult then
-				maxMult = room.EggMultiplier
-				bestRoom = room
+			if (not room.ExpireTime) or (room.ExpireTime - workspace:GetServerTimeNow() > 0) then
+				if room.EggMultiplier > maxMult then
+					maxMult = room.EggMultiplier
+					bestRoom = room
+				end
 			end
 		end
 	end
@@ -254,8 +251,8 @@ local function UnlockRoom(roomUID)
 	for _, child in ipairs(LockedDoors:GetChildren()) do
 		local Lock = child:FindFirstChild("Lock")
 		if Lock and Lock.Transparency < 0.5 then
-			rootPart:PivotTo(Lock:GetPivot())
 			task.wait(0.3)
+			rootPart:PivotTo(Lock:GetPivot())
 			isLocked = true
 			break
 		end
@@ -319,17 +316,25 @@ local function TeleportToRoom(roomModel, ignore)
 	end)
 
 	rootPart.Anchored = true
-
+	rootPart.CFrame = CFrame.new(pos)
 	task.wait(0.3)
 
-	if (not ignore) and (roomId == "DeepLockedEggRoom" or roomId == "GameMastersOffice" or roomId == "GameMastersStage") then
+	if (not ignore) and (roomId == "DeepLockedEggRoom" or roomId == "GameMastersStage") then
 		UnlockRoom(roomUID)
 	end
 
-	local targetObj = roomModel:FindFirstChild("Sign")
-		or roomModel:FindFirstChild("Backrooms Egg")
-		or roomModel:FindFirstChild("EggPedestal")
-		or roomModel:FindFirstChildWhichIsA("BasePart", true)
+	local targetObj = nil
+	local start = os.clock()
+	while os.clock() - start < 3 do
+		targetObj = roomModel:FindFirstChild("Sign")
+			or roomModel:FindFirstChild("Backrooms Egg")
+			or roomModel:FindFirstChild("EggPedestal")
+			or roomModel:FindFirstChildWhichIsA("BasePart", true)
+		if targetObj then
+			break
+		end
+		task.wait(0.1)
+	end
 
 	if targetObj ~= nil then
 		if targetObj:IsA("BasePart") then
@@ -349,30 +354,36 @@ local function TeleportToRoom(roomModel, ignore)
 		elseif targetObj.WorldPivot then
 			rootPart.CFrame = targetObj.WorldPivot
 		end
+	else
+		warn("NO TP PART FOR", roomId)
 	end
-
-	--[[
 	
-	ANOMALY ROOM??
-	
-	if (not ignore) and (roomId == "TitanicEggRoom" or roomId == "GauntletEggRoom") then
+	if (not ignore) and roomId == "DeepLockedEggRoom" then
 		task.wait(0.75)
-		local timerBillboard = roomModel:FindFirstChild("ChestTimer")
-		if timerBillboard ~= nil then
-			local timerText = timerBillboard:FindFirstChild("Timer")
-			if timerText ~= nil then
-				local minutes, seconds = string.match(timerText.Text, "(%d+):(%d+)")
-				if minutes and seconds then
-					roomData.ExpireTime = workspace:GetServerTimeNow() + (tonumber(minutes) * 60) + tonumber(seconds)
-					print((tonumber(minutes) * 60) + tonumber(seconds), "seconds left")
+		local activeInstance = InstancingCmds.Get()
+		if activeInstance then
+			local ok, playerDataList = pcall(function()
+				return activeInstance:InvokeCustom("AbstractRoom_GetPlayerData")
+			end)
+			
+			warn(ok, playerDataList)
+			
+			if ok and typeof(playerDataList) == "table" then
+				for _, roomInfo in ipairs(playerDataList) do
+					print(roomInfo.uid)
+					
+					if roomInfo.uid == roomUID then
+						local expireTime = roomInfo.data and roomInfo.data.UnlockExpireTimestamp or nil
+						print(expireTime)
+						if expireTime then
+							roomData.ExpireTime = expireTime
+						end
+						break
+					end
 				end
 			end
-		else
-			warn("doesnt exist")
 		end
 	end
-	
-	]]--
 
 	_G.Teleporting = false
 end
@@ -386,7 +397,11 @@ local function Scan()
 
 	local message = createMessage("Exploring the backrooms! (ONLY WORKS FOR DEEP BACKROOMS)")
 	StatusLabel:Set("Status: Scanning...")
-
+	
+	repeat
+		task.wait(0.5)
+	until #GeneratedBackrooms:GetChildren() > 0
+	
 	local function TPtoSpawn()
 		local character = getCharacter()
 		local activeInstance = InstancingCmds.Get()
@@ -452,11 +467,11 @@ local function Scan()
 
 						print(roomId)
 
-						if roomId == "GameMastersStage" or roomId == "GameMastersOffice" then
+						if roomId == "GameMastersStage" then
 							warn("FOUND SPECIAL ROOM: " .. roomId)
 						end
-
-						if roomId == "DeepLockedEggRoom" or string.match(roomId, "DeepFreeEggRoom") ~= nil then
+						
+						if roomId == "DeepLockedEggRoom" then
 							TeleportToRoom(room, true)
 							task.wait(1.5)
 
@@ -471,6 +486,24 @@ local function Scan()
 
 							task.wait(1.5)
 						end
+
+						if string.match(roomId, "DeepFreeEggRoom") ~= nil then
+							TeleportToRoom(room, true)
+							task.wait(1.5)
+
+							local eggDir = getEggDirForRoom(room)
+							local mult = room:GetAttribute("EggMultiplier") or 0
+
+							if eggDir and mult > 0 then
+								current.EggMultiplier = mult
+								current.EggName = eggDir.name or eggDir._id or ""
+								warn("FOUND: " .. roomId .. " with multiplier: " .. mult .. "x | Egg: " .. current.EggName)
+							end
+
+							task.wait(1.5)
+						end
+						
+						TeleportToRoom(room, true)
 					end
 				end
 			end
@@ -480,7 +513,7 @@ local function Scan()
 	run()
 
 	while true do
-		if #_G.ScannedRooms >= 400 then
+		if #_G.ScannedRooms >= 380 then
 			break
 		end
 
@@ -510,9 +543,8 @@ local function Scan()
 		end
 
 		_G.VistedRooms[room.uid] = true
-		TeleportToRoom(room.Model, true)
 		run()
-		task.wait(0.3)
+		task.wait(.1)
 	end
 
 	_G.IsScanning = false
@@ -667,6 +699,44 @@ BreakablesRoomTPButton = MiniBossTab:CreateButton({
 			Rayfield:Notify({
 				Title = "No Breakable Room",
 				Content = "Could not find any scanned Breakable Room",
+				Duration = 4,
+				Image = 4483362458
+			})
+		end
+	end,
+})
+
+DeepChestRoomTPButton = MiniBossTab:CreateButton({
+	Name = "Teleport to nearest MINI Chest Room!",
+	Callback = function()
+		if (not canDoAction()) then
+			return
+		end
+
+		local found = false
+		for _, r in ipairs(_G.ScannedRooms) do
+			if string.match(r.Id, "DeepChestRoom") ~= nil then
+				found = true
+				TeleportToRoom(r.Model)
+				task.wait(0.3)
+				local breakableZone = r.Model:FindFirstChild("BREAK_ZONE")
+				if breakableZone ~= nil then
+					local character = getCharacter()
+					if character then
+						local rootPart = character:FindFirstChild("HumanoidRootPart")
+						if rootPart then
+							rootPart:PivotTo(CFrame.new(breakableZone.Position) + Vector3.new(0, 3, 0))
+						end
+					end
+				end
+				break
+			end
+		end
+
+		if not found then
+			Rayfield:Notify({
+				Title = "No Breakable Room",
+				Content = "Could not find any scanned MINI Chest Room",
 				Duration = 4,
 				Image = 4483362458
 			})
