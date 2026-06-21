@@ -19,8 +19,14 @@ local MiscItem = require(game.ReplicatedStorage.Library.Items.MiscItem)
 local EggCmds = require(game.ReplicatedStorage.Library.Client.EggCmds)
 local CustomEggsCmds = require(game.ReplicatedStorage.Library.Client.CustomEggsCmds)
 local PlayerPet = require(game.ReplicatedStorage.Library.Client.PlayerPet)
-local InventoryCmds = require(game.ReplicatedStorage.Library.Client.InventoryCmds)
-local CurrencyCmds = require(game.ReplicatedStorage.Library.Client.CurrencyCmds)
+
+local oldCalculate = PlayerPet.CalculateSpeedMultiplier
+PlayerPet.CalculateSpeedMultiplier = function(self, ...)
+	if _G.InfinitePetSpeed then
+		return 100000
+	end
+	return oldCalculate(self, ...)
+end
 
 local localPlayer = Players.LocalPlayer
 local enterPosition = nil
@@ -44,6 +50,7 @@ local Window = Rayfield:CreateWindow({
 
 local Tab = Window:CreateTab("Main", 4483362458)
 local MiniBossTab = Window:CreateTab("Boss Chest", 4483362458)
+local MiscTab = Window:CreateTab("Misc", 4483362458)
 local StatusLabel = Tab:CreateLabel("Status: Idle")
 
 _G.ScannedRooms = {}
@@ -54,12 +61,14 @@ _G.AutoHatch = false
 _G.AutoTPBestEgg = false
 _G.AutoMiniBoss = false
 _G.AutoTPLockedEgg = false
+_G.InfinitePetSpeed = false
 
-_G.CurrentLockedEgg = false
+_G.SelectedLockedEggMult = "Any"
 
 local EggDropdown
 local FreeEggTPButton
 local AutoBestEgg
+local LockedEggTarget
 local LockedEggTPButton
 local AutoLockedEgg
 local AutoHatch
@@ -68,6 +77,9 @@ local BreakablesRoomTPButton
 local DeepChestRoomTPButton
 local BossTPButton
 local AutoFarmBoss
+local RejoinButton
+local ServerHopButton
+local InfPetSpeedButton
 
 local function getCharacter()
 	return localPlayer.Character or localPlayer.CharacterAdded:Wait()
@@ -94,12 +106,15 @@ end
 
 local function serverHop(reason)
 	local message = createMessage(reason)
+
 	local success = pcall(function()
 		local api = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+
 		local function list(cursor)
 			local Raw = game:HttpGet(api .. ((cursor and "&cursor=" .. cursor) or ""))
 			return HttpService:JSONDecode(Raw)
 		end
+
 		local servers = list()
 		for _, server in ipairs(servers.data) do
 			if server.playing < server.maxPlayers and server.id ~= game.JobId then
@@ -108,6 +123,7 @@ local function serverHop(reason)
 			end
 		end
 	end)
+
 	if not success then
 		TeleportService:Teleport(game.PlaceId, localPlayer)
 	else
@@ -125,12 +141,13 @@ end
 
 _G.ExecutedScript = true
 
-local activeFolder = workspace:WaitForChild("__THINGS")
-	:WaitForChild("__INSTANCE_CONTAINER")
-	:WaitForChild("Active")
-
-local backroomsFolder = activeFolder:WaitForChild("Backrooms")
-local GeneratedBackrooms = backroomsFolder:WaitForChild("GeneratedBackrooms")
+local function getGeneratedBackrooms()
+	local things = workspace:FindFirstChild("__THINGS")
+	local container = things and things:FindFirstChild("__INSTANCE_CONTAINER")
+	local active = container and container:FindFirstChild("Active")
+	local backrooms = active and active:FindFirstChild("Backrooms")
+	return backrooms and backrooms:FindFirstChild("GeneratedBackrooms")
+end
 
 local function findRoomDataByUID(roomUID)
 	for _, roomData in ipairs(_G.ScannedRooms) do
@@ -142,11 +159,17 @@ local function findRoomDataByUID(roomUID)
 end
 
 local function findRoomModelByUID(roomUID)
-	for _, roomModel in ipairs(GeneratedBackrooms:GetChildren()) do
+	local folder = getGeneratedBackrooms()
+	if not folder then 
+		return nil 
+	end
+
+	for _, roomModel in ipairs(folder:GetChildren()) do
 		if roomModel:GetAttribute("RoomUID") == roomUID then
 			return roomModel
 		end
 	end
+
 	return nil
 end
 
@@ -211,11 +234,16 @@ end
 local function getBestLockedEggRoom()
 	local bestRoom = nil
 	local maxMult = -1
+	local targetMult = (_G.SelectedLockedEggMult and _G.SelectedLockedEggMult ~= "Any")
+		and tonumber(string.match(_G.SelectedLockedEggMult, "%d+"))
+		or nil
 
 	for _, room in ipairs(_G.ScannedRooms) do
 		if room.Id == "DeepLockedEggRoom" and room.EggMultiplier ~= nil then
 			if (not room.ExpireTime) or (room.ExpireTime - workspace:GetServerTimeNow() > 0) then
-				if room.EggMultiplier > maxMult then
+				local isMatch = (not targetMult) or room.EggMultiplier >= targetMult
+
+				if isMatch and room.EggMultiplier > maxMult then
 					maxMult = room.EggMultiplier
 					bestRoom = room
 				end
@@ -224,6 +252,14 @@ local function getBestLockedEggRoom()
 	end
 
 	return bestRoom
+end
+
+local function ownsKey()
+	local keyItem = MiscItem("Deep Backrooms Crayon Key")
+	if keyItem and keyItem:HasAny() then
+		return true
+	end
+	return false
 end
 
 local function UnlockRoom(roomUID)
@@ -251,8 +287,8 @@ local function UnlockRoom(roomUID)
 	for _, child in ipairs(LockedDoors:GetChildren()) do
 		local Lock = child:FindFirstChild("Lock")
 		if Lock and Lock.Transparency < 0.5 then
-			task.wait(0.3)
-			rootPart:PivotTo(Lock:GetPivot())
+			rootPart.CFrame = CFrame.new(Lock.Position)
+			task.wait(0.5)
 			isLocked = true
 			break
 		end
@@ -262,8 +298,8 @@ local function UnlockRoom(roomUID)
 		return 
 	end
 
-	local keyItem = MiscItem("Deep Backrooms Crayon Key")
-	if keyItem and keyItem:HasAny() then
+	local ownsKey = ownsKey()
+	if ownsKey then
 		local activeInstance = InstancingCmds.Get()
 		if activeInstance then
 			activeInstance:FireCustom("AbstractRoom_FireServer", roomUID, "UnlockDoors")
@@ -357,7 +393,7 @@ local function TeleportToRoom(roomModel, ignore)
 	else
 		warn("NO TP PART FOR", roomId)
 	end
-	
+
 	if (not ignore) and roomId == "DeepLockedEggRoom" then
 		task.wait(0.75)
 		local activeInstance = InstancingCmds.Get()
@@ -365,23 +401,23 @@ local function TeleportToRoom(roomModel, ignore)
 			local ok, playerDataList = pcall(function()
 				return activeInstance:InvokeCustom("AbstractRoom_GetPlayerData")
 			end)
-			
-			warn(ok, playerDataList)
-			
-			if ok and typeof(playerDataList) == "table" then
-				for _, roomInfo in ipairs(playerDataList) do
-					print(roomInfo.uid)
-					
-					if roomInfo.uid == roomUID then
-						local expireTime = roomInfo.data and roomInfo.data.UnlockExpireTimestamp or nil
-						print(expireTime)
-						if expireTime then
-							roomData.ExpireTime = expireTime
-						end
-						break
+
+			if not ok then
+				warn("FAILED TO GET PLR DATA", playerDataList)
+				return
+			end
+
+			for _, roomInfo in ipairs(playerDataList) do
+				if roomInfo.uid == roomUID then
+					local expireTime = roomInfo.data and roomInfo.data.UnlockExpireTimestamp or nil
+					if expireTime then
+						roomData.ExpireTime = expireTime
 					end
+					break
 				end
 			end
+		else
+			warn("not in instance??")
 		end
 	end
 
@@ -397,22 +433,35 @@ local function Scan()
 
 	local message = createMessage("Exploring the backrooms! (ONLY WORKS FOR DEEP BACKROOMS)")
 	StatusLabel:Set("Status: Scanning...")
-	
+
 	repeat
 		task.wait(0.5)
-	until #GeneratedBackrooms:GetChildren() > 0
-	
+		local folder = getGeneratedBackrooms()
+		warn("WAITING...")
+	until folder and #folder:GetChildren() > 0
+
 	local function TPtoSpawn()
 		local character = getCharacter()
 		local activeInstance = InstancingCmds.Get()
 		if character and activeInstance then
+			print(enterPosition)
 			if typeof(enterPosition) ~= "Vector3" then
-				local spawnRoom = GeneratedBackrooms:WaitForChild("DeepSpawnRoom", 5)
-				if spawnRoom then
-					local spawnLocation = spawnRoom:FindFirstChild("DEEP_SPAWN_LOCATION")
-					if spawnLocation then
-						enterPosition = spawnLocation.Position
+				local folder = getGeneratedBackrooms()
+				if folder then
+					local spawnRoom = folder:WaitForChild("DeepSpawnRoom", 5)
+					if spawnRoom then
+						local spawnLocation = spawnRoom:FindFirstChild("DEEP_SPAWN_LOCATION")
+						if spawnLocation then
+							enterPosition = spawnLocation.Position
+							warn("SAVED", enterPosition)
+						else
+							warn("OK BRO")
+						end
+					else
+						warn("ig")
 					end
+				else
+					warn("NO ROOMS")
 				end
 			end
 
@@ -430,11 +479,13 @@ local function Scan()
 	TPtoSpawn()
 
 	local function run()
-		for _, room in ipairs(GeneratedBackrooms:GetChildren()) do
-			if room.Name == "Walls" then
-				room:Destroy()
-			end
+		local folder = getGeneratedBackrooms()
+		if not folder then
+			warn("no rooms RUN CALL")
+			return 
+		end
 
+		for _, room in ipairs(folder:GetChildren()) do
 			if room:GetAttribute("DeepRoom") ~= false then
 				local roomUID = room:GetAttribute("RoomUID")
 				if roomUID then
@@ -445,8 +496,10 @@ local function Scan()
 							break
 						end
 					end
+
 					local roomId = room:GetAttribute("RoomID")
 					local roomCFrame = room:GetPivot()
+
 					if not existing then
 						local roomData = {
 							uid = roomUID,
@@ -465,12 +518,12 @@ local function Scan()
 							continue
 						end
 
-						print(roomId)
+						print("DEBUG", roomId)
 
 						if roomId == "GameMastersStage" then
 							warn("FOUND SPECIAL ROOM: " .. roomId)
 						end
-						
+
 						if roomId == "DeepLockedEggRoom" then
 							TeleportToRoom(room, true)
 							task.wait(1.5)
@@ -502,8 +555,6 @@ local function Scan()
 
 							task.wait(1.5)
 						end
-						
-						TeleportToRoom(room, true)
 					end
 				end
 			end
@@ -513,7 +564,7 @@ local function Scan()
 	run()
 
 	while true do
-		if #_G.ScannedRooms >= 380 then
+		if #_G.ScannedRooms >= 400 then
 			break
 		end
 
@@ -525,6 +576,7 @@ local function Scan()
 		if not character then
 			continue
 		end
+
 		local rootPart = character:FindFirstChild("HumanoidRootPart")
 		if not rootPart then
 			continue
@@ -543,6 +595,7 @@ local function Scan()
 		end
 
 		_G.VistedRooms[room.uid] = true
+		TeleportToRoom(room.Model, true)
 		run()
 		task.wait(.1)
 	end
@@ -588,7 +641,31 @@ AutoBestEgg = Tab:CreateToggle({
 			return
 		end
 
+		if value then
+			if AutoFarmBoss ~= nil then
+				AutoFarmBoss:Set(false)
+			end
+			if AutoLockedEgg ~= nil then
+				AutoLockedEgg:Set(false)
+			end
+		end
+
 		_G.AutoTPBestEgg = value
+	end,
+})
+
+LockedEggTarget = Tab:CreateDropdown({
+	Name = "Locked Egg Mult Target",
+	Options = {"Any", "50x", "75x", "100x"},
+	CurrentOption = {"Any"},
+	MultipleOptions = false,
+	Flag = "EggTarget",
+	Callback = function(options)
+		if (not canDoAction()) then
+			return
+		end
+
+		_G.SelectedLockedEggMult = (typeof(options) == "table" and options[1] or options)
 	end,
 })
 
@@ -596,6 +673,17 @@ LockedEggTPButton = Tab:CreateButton({
 	Name = "Teleport to Locked Egg Egg Room!",
 	Callback = function()
 		if (not canDoAction()) then
+			return
+		end
+		
+		local ownsKey = ownsKey()
+		if not ownsKey then
+			Rayfield:Notify({
+				Title = "No Key",
+				Content = "YOU CANT UNLOCK THIS WITHOUT A KEY",
+				Duration = 4,
+				Image = 4483362458
+			})
 			return
 		end
 
@@ -620,6 +708,26 @@ AutoLockedEgg = Tab:CreateToggle({
 	Callback = function(value)
 		if (not canDoAction()) then
 			return
+		end
+		
+		local ownsKey = ownsKey()
+		if not ownsKey then
+			Rayfield:Notify({
+				Title = "No Key",
+				Content = "YOU CANT UNLOCK THIS WITHOUT A KEY",
+				Duration = 4,
+				Image = 4483362458
+			})
+			return
+		end
+
+		if value then
+			if AutoFarmBoss ~= nil then
+				AutoFarmBoss:Set(false)
+			end
+			if AutoBestEgg ~= nil then
+				AutoBestEgg:Set(false)
+			end
 		end
 
 		_G.AutoTPLockedEgg = value
@@ -750,6 +858,17 @@ BossTPButton = MiniBossTab:CreateButton({
 		if (not canDoAction()) then
 			return
 		end
+		
+		local ownsKey = ownsKey()
+		if not ownsKey then
+			Rayfield:Notify({
+				Title = "No Key",
+				Content = "YOU CANT UNLOCK THIS WITHOUT A KEY",
+				Duration = 4,
+				Image = 4483362458
+			})
+			return
+		end
 
 		local found = false
 		for _, r in ipairs(_G.ScannedRooms) do
@@ -779,7 +898,18 @@ AutoFarmBoss = MiniBossTab:CreateToggle({
 		if (not canDoAction()) then
 			return
 		end
-
+		
+		local ownsKey = ownsKey()
+		if not ownsKey then
+			Rayfield:Notify({
+				Title = "No Key",
+				Content = "YOU CANT UNLOCK THIS WITHOUT A KEY",
+				Duration = 4,
+				Image = 4483362458
+			})
+			return
+		end
+		
 		if value then
 			if AutoHatch ~= nil then
 				AutoHatch:Set(false)
@@ -790,6 +920,29 @@ AutoFarmBoss = MiniBossTab:CreateToggle({
 		end
 
 		_G.AutoMiniBoss = value
+	end,
+})
+
+InfPetSpeedButton = MiscTab:CreateToggle({
+	Name = "Infinite Pet Speed",
+	CurrentValue = false,
+	Flag = "InfinitePetSpeed",
+	Callback = function(value)
+		_G.InfinitePetSpeed = value
+	end,
+})
+
+RejoinButton = MiscTab:CreateButton({
+	Name = "Rejoin",
+	Callback = function()
+		TeleportService:Teleport(game.PlaceId, Players.LocalPlayer)
+	end,
+})
+
+ServerHopButton = MiscTab:CreateButton({
+	Name = "ServerHop",
+	Callback = function()
+		serverHop("Server Hopping...")
 	end,
 })
 
@@ -960,7 +1113,7 @@ task.spawn(function()
 				task.wait(1)
 			else
 				local targetBreakable = nil
-				local breakables = workspace.__THINGS.Breakables:GetChildren()
+				local breakables = workspace:FindFirstChild("__THINGS"):FindFirstChild("Breakables"):GetChildren()
 				for _, b in ipairs(breakables) do
 					local bId = b:GetAttribute("BreakableID")
 					if bId == "Daydream Mimic Chest2" then
@@ -1008,11 +1161,16 @@ end)
 
 task.spawn(function()
 	while true do
-		for _, room in ipairs(GeneratedBackrooms:GetChildren()) do
-			if room.Name == "Walls" then
-				room:Destroy()
+		local folder = getGeneratedBackrooms()
+		if folder then
+			for _, child in ipairs(folder:GetChildren()) do
+				if child.Name == "Walls" then
+					warn("Walls destoyed")
+					child:Destroy()
+				end
 			end
 		end
+
 		task.wait(1)
 	end
 end)
@@ -1023,6 +1181,6 @@ localPlayer.Idled:Connect(function()
 	VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
 end)
 
-task.wait(2)
+task.wait(2) -- DO NOT REMOVE
 Scan()
 Rayfield:LoadConfiguration()
