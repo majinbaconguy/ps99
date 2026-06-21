@@ -54,6 +54,7 @@ local MiscTab = Window:CreateTab("Misc", 4483362458)
 local StatusLabel = Tab:CreateLabel("Status: Idle")
 
 _G.ScannedRooms = {}
+_G.ScannedRoomsMap = {}
 _G.VistedRooms = {}
 _G.IsScanning = false
 _G.Teleporting = false
@@ -65,7 +66,6 @@ _G.InfinitePetSpeed = false
 
 _G.SelectedLockedEggMult = "Any"
 
-local scannedRoomsMap = {}
 local EggDropdown
 local FreeEggTPButton
 local AutoBestEgg
@@ -151,7 +151,11 @@ local function getGeneratedBackrooms()
 end
 
 local function findRoomDataByUID(roomUID)
-	return scannedRoomsMap[roomUID]
+	local roomData = _G.ScannedRoomsMap[roomUID]
+	if roomData then
+		return roomData
+	end
+	return nil
 end
 
 local function findRoomModelByUID(roomUID)
@@ -485,7 +489,7 @@ local function Scan()
 			if room:GetAttribute("DeepRoom") ~= false then
 				local roomUID = room:GetAttribute("RoomUID")
 				if roomUID then
-					local existing = scannedRoomsMap[roomUID]
+					local existing = _G.ScannedRoomsMap[roomUID]
 					local roomId = room:GetAttribute("RoomID")
 					local roomCFrame = room:GetPivot()
 
@@ -499,7 +503,7 @@ local function Scan()
 						}
 
 						table.insert(_G.ScannedRooms, roomData)
-						scannedRoomsMap[roomUID] = roomData
+						_G.ScannedRoomsMap[roomUID] = roomData
 						StatusLabel:Set("Status: Scanned " .. #_G.ScannedRooms .. " rooms")
 
 						local current = roomData
@@ -1161,7 +1165,7 @@ task.spawn(function()
 			end
 		end
 
-		task.wait(0.5)
+		task.wait(1)
 	end
 end)
 
