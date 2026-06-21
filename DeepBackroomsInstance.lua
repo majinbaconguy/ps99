@@ -403,14 +403,14 @@ local function CleanupWalls()
 	end
 	
 	for _, child in ipairs(folder:GetChildren()) do
-		pcall(function()
+		task.spawn(function()
 			if child.Name == "Walls" then
 				local children = child:GetChildren()
 				for i, part in ipairs(children) do
-					part:Destroy()
-					if i % 50 == 0 then
-						task.wait()
+					if i % 25 == 0 then
+						RunService.Heartbeat:Wait()
 					end
+					part:Destroy()
 				end
 				child:Destroy()
 			end
@@ -437,7 +437,7 @@ local function Scan()
 		warn("WAITING...")
 	until #folder:GetChildren() > 0
 	
-	task.spawn(CleanupWalls)
+	CleanupWalls()
 
 	local function TPtoSpawn()
 		local character = getCharacter()
