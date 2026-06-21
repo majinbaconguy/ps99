@@ -7,6 +7,7 @@ local VirtualUser = game:GetService("VirtualUser")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local CollectionService = game:GetService("CollectionService")
+local RunService = game:GetService("RunService")
 
 if typeof(require) ~= "function" then
 	Players.LocalPlayer:Kick("Unsupported")
@@ -356,8 +357,13 @@ local function TeleportToRoom(roomModel, isScanning)
 	end
 
 	rootPart.Anchored = true
-	rootPart.CFrame =  roomModel:GetBoundingBox() + Vector3.new(0, 15, 0)
-
+	
+	local targetObj = roomModel:FindFirstChild("Sign")
+		or roomModel:FindFirstChild("BREAK_ZONE")
+		or roomModel:FindFirstChildWhichIsA("BasePart", true)
+	
+	rootPart.CFrame = (targetObj and targetObj.CFrame or roomModel:GetBoundingBox()) + Vector3.new(0, 15, 0) 
+	
 	if (not isScanning) and roomId == "DeepLockedEggRoom" then
 		task.wait(0.5)
 		local activeInstance = InstancingCmds.Get()
@@ -388,6 +394,21 @@ local function TeleportToRoom(roomModel, isScanning)
 	_G.Teleporting = false
 end
 
+local function CleanupWalls()
+	local folder = getGeneratedBackrooms()
+	if not folder then
+		return
+	end
+	
+	for _, child in ipairs(folder:GetDescendants()) do
+		pcall(function()
+			if child and child.Parent and string.find(child.Name:lower(), "wall") then
+				child:Destroy()
+			end
+		end)
+	end
+end
+
 local function Scan()
 	if _G.IsScanning == true then
 		return
@@ -399,53 +420,43 @@ local function Scan()
 	StatusLabel:Set("Status: Scanning...")
 
 	repeat
-		task.wait(0.5)
 		local folder = getGeneratedBackrooms()
+		if not folder then
+			break
+		end
 		warn("WAITING...")
-	until folder and #folder:GetChildren() > 0
+		task.wait(0.5)
+	until #folder:GetChildren() > 0
 	
-	local folder = getGeneratedBackrooms()
-	local descendants = folder:GetDescendants()
-	for _, child in ipairs(descendants) do
-		pcall(function()
-			if child and child.Parent and string.find(child.Name:lower(), "wall") then
-				child:Destroy()
-			end
-		end)
-	end
+	task.spawn(CleanupWalls)
 
 	local function TPtoSpawn()
 		local character = getCharacter()
-		local activeInstance = InstancingCmds.Get()
-		if character and activeInstance then
-			if typeof(enterPosition) ~= "Vector3" then
-				local folder = getGeneratedBackrooms()
-				if not folder then
-					return
-				end
-				
-				local spawnRoom = folder:WaitForChild("DeepSpawnRoom", 5)
-				if not spawnRoom then
-					return
-				end
-				
-				local spawnLocation = spawnRoom:FindFirstChild("DEEP_SPAWN_LOCATION")
-				if spawnLocation then
-					enterPosition = spawnLocation.Position
-					warn("SAVED", enterPosition)
-				end
+		if not character then
+			return
+		end
+		
+		if typeof(enterPosition) ~= "Vector3"  then
+			local folder = getGeneratedBackrooms()
+			if not folder then
+				return
 			end
 
-			local pos = enterPosition + Vector3.new(0, 3, 0)
+			local spawnRoom = folder:FindFirstChild("DeepSpawnRoom")
+			if not spawnRoom then
+				return
+			end
 
-			Network.Fire("RequestStreaming", pos)
-			
-			task.delay(0.25, function()
-				if character.Parent and InstancingCmds.IsInInstance("Backrooms") then
-					character:PivotTo(CFrame.new(pos))
-				end
-			end)
+			local spawnLocation = spawnRoom:FindFirstChild("DEEP_SPAWN_LOCATION")
+			if spawnLocation then
+				enterPosition = spawnLocation.Position
+				warn("SAVED", enterPosition)
+			end
 		end
+		
+		local pos = enterPosition + Vector3.new(0, 3, 0)
+		Network.Fire("RequestStreaming", pos)
+		character:PivotTo(CFrame.new(pos))
 	end
 
 	TPtoSpawn()
@@ -503,19 +514,19 @@ local function Scan()
 		end
 
 		if _G.Teleporting == true then
-			task.wait(0.1)
+			task.wait(0.2)
 			continue
 		end
 
 		local character = getCharacter()
 		if not character then
-			task.wait(0.1)
+			task.wait(0.2)
 			continue
 		end
 
 		local rootPart = character:FindFirstChild("HumanoidRootPart")
 		if not rootPart then
-			task.wait(0.1)
+			task.wait(0.2)
 			continue
 		end
 
@@ -537,7 +548,8 @@ local function Scan()
 
 		_G.VistedRooms[room.uid] = true
 		TeleportToRoom(room.Model, true)
-		task.wait(0.1)
+		task.wait(0.2)
+		RunService.RenderStepped:Wait()
 		run()
 	end
 
@@ -559,6 +571,7 @@ FreeEggTPButton = Tab:CreateButton({
 		if (not canDoAction()) then
 			return
 		end
+		
 		local room = getBestEggRoom()
 		if room then
 			TeleportToRoom(room.Model)
@@ -1107,18 +1120,7 @@ task.spawn(function()
 			continue
 		end
 
-		local folder = getGeneratedBackrooms()
-		if folder then
-			local descendants = folder:GetDescendants()
-			for _, child in ipairs(descendants) do
-				pcall(function()
-					if child and child.Parent and string.find(child.Name:lower(), "wall") then
-						child:Destroy()
-					end
-				end)
-			end
-		end
-
+		CleanupWalls()
 		task.wait(1)
 	end
 end)
