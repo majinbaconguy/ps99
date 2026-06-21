@@ -191,37 +191,12 @@ local function getNearestEgg(hrp)
 	return closestEgg
 end
 
-local function getEggDirForRoom_OLD(roomModel)
-	local sign = roomModel:FindFirstChild("Sign")
-	if not sign then
-		return nil
-	end
-
-	local closestEgg = nil
-	local minDist = 50
-	for _, egg in pairs(CustomEggsCmds.All()) do
-		if egg._position then
-			local dist = (egg._position - sign.Position).Magnitude
-			if dist < minDist then
-				minDist = dist
-				closestEgg = egg
-			end
-		end
-	end
-
-	if closestEgg then
-		return closestEgg._dir
-	end
-
-	return nil
-end
-
 local function getBestEggRoom()
 	local bestRoom = nil
 	local maxMult = -1
 
 	for _, room in ipairs(_G.ScannedRooms) do
-		if string.match(room.Id, "DeepFreeEggRoom") and room.EggMultiplier ~= nil then
+		if string.match(room.Id, "DeepFreeEggRoom") ~= nil and room.EggMultiplier ~= nil then
 			if room.EggMultiplier > maxMult then
 				maxMult = room.EggMultiplier
 				bestRoom = room
@@ -256,14 +231,18 @@ local function getBestLockedEggRoom()
 end
 
 local function keyCheck()
-	local ok, hasKey = pcall(function()
-		local keyItem = MiscItem("Deep Backrooms Crayon Key")
-		return keyItem and keyItem:HasAny() or false
-	end)
-	return ok and hasKey or false
+	local keyItem = MiscItem("Deep Backrooms Crayon Key")
+	if keyItem and keyItem:HasAny() then
+		return true
+	end
+	return false
 end
 
 local function UnlockRoom(roomUID)
+	if _G.IsScanning == true then
+		return
+	end
+	
 	local character = getCharacter()
 	if not character then
 		return
@@ -365,7 +344,6 @@ local function TeleportToRoom(roomUID, isScanning)
 		end
 		
 		local targetObj = roomModel:FindFirstChild("Sign")
-			or roomModel:FindFirstChild("BREAK_ZONE")
 			or roomModel.PrimaryPart
 			or roomModel:FindFirstChildWhichIsA("BasePart", true)
 		
@@ -408,18 +386,49 @@ local function CleanupWalls()
 	end
 	
 	for _, child in ipairs(folder:GetChildren()) do
-		if child.Name == "Walls" then
-			local children = child:GetChildren()
-			for i, part in ipairs(children) do
-				if i % 25 == 0 then
-					RunService.Heartbeat:Wait()
+		task.spawn(function()
+			if child.Name == "Walls" then
+				local children = child:GetChildren()
+				for i, part in ipairs(children) do
+					if i % 25 == 0 then
+						RunService.Heartbeat:Wait()
+					end
+					part:Destroy()
 				end
-				part:Destroy()
+				child:Destroy()
 			end
-			child:Destroy()
-			break
-		end
+		end)
 	end
+end
+
+local function TPtoSpawn()
+	local character = getCharacter()
+	if not character then
+		return
+	end
+
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then
+		return
+	end
+
+	if typeof(enterPosition) ~= "Vector3" then
+		return
+	end
+
+	local pos = enterPosition + Vector3.new(0, 4, 0)
+
+	Network.Fire("RequestStreaming", pos)
+
+	task.delay(0.25, function()
+		if character.Parent then
+			if rootPart.Anchored == true then
+				rootPart.Anchored = false
+			end
+		
+			character:PivotTo(CFrame.new(pos))
+		end
+	end)
 end
 
 local function Scan()
@@ -442,6 +451,12 @@ local function Scan()
 	until #folder:GetChildren() > 0
 	
 	CleanupWalls()
+	
+	local spawnLocation = CollectionService:GetTagged("DeepSpawnLocation")[1]
+	if spawnLocation and spawnLocation:IsA("BasePart") then
+		enterPosition = spawnLocation.Position
+		warn("SAVED", enterPosition)
+	end
 
 	local function run()
 		local folder = getGeneratedBackrooms()
@@ -451,7 +466,7 @@ local function Scan()
 		end
 		
 		for _, room in ipairs(folder:GetChildren()) do
-			if room:GetAttribute("DeepRoom") ~= false then
+			if room:GetAttribute("DeepRoom") == true then
 				local roomUID = room:GetAttribute("RoomUID")
 				if roomUID then
 					local existing = _G.ScannedRoomsMap[roomUID]
@@ -491,24 +506,24 @@ local function Scan()
 	run()
 
 	while true do
-		if #_G.ScannedRooms >= 400 then
+		if #_G.ScannedRooms >= 250 then
 			break
 		end
 
 		if _G.Teleporting == true then
-			task.wait(0.25)
+			task.wait(0)
 			continue
 		end
 
 		local character = getCharacter()
 		if not character then
-			task.wait(0.25)
+			task.wait(0)
 			continue
 		end
 
 		local rootPart = character:FindFirstChild("HumanoidRootPart")
 		if not rootPart then
-			task.wait(0.25)
+			task.wait(0)
 			continue
 		end
 
@@ -539,50 +554,8 @@ local function Scan()
 	StatusLabel:Set("Status: Scan Complete (" .. #_G.ScannedRooms .. " rooms)")
 	game.Debris:AddItem(message, 0)
 	
-	local function TPtoSpawn()
-		local character = getCharacter()
-		if not character then
-			return
-		end
-		
-		local rootPart = character:FindFirstChild("HumanoidRootPart")
-		if not rootPart then
-			return
-		end
-
-		if typeof(enterPosition) ~= "Vector3"  then
-			local folder = getGeneratedBackrooms()
-			if not folder then
-				return
-			end
-
-			local spawnRoom = folder:FindFirstChild("DeepSpawnRoom")
-			if not spawnRoom then
-				return
-			end
-
-			local spawnLocation = spawnRoom:FindFirstChild("DEEP_SPAWN_LOCATION")
-			if spawnLocation then
-				enterPosition = spawnLocation.Position
-				warn("SAVED", enterPosition)
-			end
-		end
-
-		local pos = enterPosition + Vector3.new(0, 4, 0)
-
-		Network.Fire("RequestStreaming", pos)
-		
-		task.delay(0.25, function()
-			if character.Parent then
-				rootPart.Anchored = false
-				character:PivotTo(CFrame.new(pos))
-			end
-		end)
-	end
-	
 	TPtoSpawn()
-
-	warn("Scan successfully finished!")
+	warn("Scan finished!")
 end
 
 local function canDoAction()
@@ -744,6 +717,18 @@ BreakablesRoomTPButton = MiniBossTab:CreateButton({
 			if string.match(r.Id, "DeepCoinRoom") ~= nil then
 				found = true
 				TeleportToRoom(r.uid)
+				task.wait(0.3)
+				local roomModel = r.Model
+				local breakZone = roomModel:FindFirstChild("BREAK_ZONE")
+				if breakZone then
+					local character = getCharacter()
+					if character then
+						local rooPart = character:FindFirstChild("HumanoidRootPart")
+						if rooPart then
+							character:PivotTo(CFrame.new(breakZone.Position) + Vector3.new(0, 3, 0))
+						end
+					end
+				end
 				break
 			end
 		end
@@ -771,6 +756,18 @@ DeepChestRoomTPButton = MiniBossTab:CreateButton({
 			if string.match(r.Id, "DeepChestRoom") ~= nil then
 				found = true
 				TeleportToRoom(r.uid)
+				task.wait(0.3)
+				local roomModel = r.Model
+				local breakZone = roomModel:FindFirstChild("BREAK_ZONE")
+				if breakZone then
+					local character = getCharacter()
+					if character then
+						local rooPart = character:FindFirstChild("HumanoidRootPart")
+						if rooPart then
+							character:PivotTo(CFrame.new(breakZone.Position) + Vector3.new(0, 3, 0))
+						end
+					end
+				end
 				break
 			end
 		end
@@ -798,6 +795,18 @@ BossTPButton = MiniBossTab:CreateButton({
 			if r.Id == "GameMastersStage" then
 				found = true
 				TeleportToRoom(r.uid)
+				task.wait(0.3)
+				local roomModel = r.Model
+				local breakZone = roomModel:FindFirstChild("BREAK_ZONE")
+				if breakZone then
+					local character = getCharacter()
+					if character then
+						local rooPart = character:FindFirstChild("HumanoidRootPart")
+						if rooPart then
+							character:PivotTo(CFrame.new(breakZone.Position) + Vector3.new(0, 3, 0))
+						end
+					end
+				end
 				break
 			end
 		end
@@ -883,18 +892,10 @@ task.spawn(function()
 		local room = getBestEggRoom()
 		if room then
 			local sign = room.Model:FindFirstChild("Sign")
-			if sign then
-				local pedestalPos = sign:GetPivot().Position
-				local distance = (rootPart.Position - pedestalPos).Magnitude
-				if distance > 15 then
-					TeleportToRoom(room.uid)
-				end
-			else
-				local roomPos = room.Model:GetPivot().Position
-				local distance = (rootPart.Position - roomPos).Magnitude
-				if distance > 25 then
-					TeleportToRoom(room.uid)
-				end
+			local pos = sign and sign:GetPivot().Position or room.Model:GetPivot().Position
+			local distance = (rootPart.Position - pos).Magnitude
+			if distance > (sign and 15 or 25) then
+				TeleportToRoom(room.uid)
 			end
 		else
 			serverHop("No Best Egg in this server. hopping...")
@@ -929,18 +930,10 @@ task.spawn(function()
 		local room = getBestLockedEggRoom()
 		if room then
 			local sign = room.Model:FindFirstChild("Sign")
-			if sign then
-				local pedestalPos = sign:GetPivot().Position
-				local distance = (rootPart.Position - pedestalPos).Magnitude
-				if distance > 15 then
-					TeleportToRoom(room.uid)
-				end
-			else
-				local roomPos = room.Model:GetPivot().Position
-				local distance = (rootPart.Position - roomPos).Magnitude
-				if distance > 25 then
-					TeleportToRoom(room.uid)
-				end
+			local pos = sign and sign:GetPivot().Position or room.Model:GetPivot().Position
+			local distance = (rootPart.Position - pos).Magnitude
+			if distance > (sign and 15 or 25) then
+				TeleportToRoom(room.uid)
 			end
 		else
 			serverHop("No Best Egg in this server. hopping...")
@@ -1075,7 +1068,7 @@ end)
 task.spawn(function()
 	while true do
 		if _G.IsScanning then
-			task.wait(1)
+			task.wait(0)
 			continue
 		end
 
@@ -1085,6 +1078,7 @@ task.spawn(function()
 end)
 
 localPlayer.Idled:Connect(function()
+	-- ANTI AFK
 	VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
 	task.wait(1)
 	VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
