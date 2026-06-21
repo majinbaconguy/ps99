@@ -347,7 +347,7 @@ local function TeleportToRoom(roomUID, isScanning)
 	rootPart.Anchored = true
 	rootPart.CFrame = CFrame.new(pos) + Vector3.new(0, 3, 0)
 	
-	task.delay(3, function()
+	task.delay(1.5, function()
 		if forceField and forceField.Parent then 
 			forceField:Destroy() 
 		end
@@ -468,7 +468,7 @@ local function Scan()
 			end
 		end
 		
-		local pos = enterPosition + Vector3.new(0, 2, 0)
+		local pos = enterPosition + Vector3.new(0, 4, 0)
 		
 		Network.Fire("RequestStreaming", pos)
 		task.delay(0.25, function()
@@ -660,16 +660,6 @@ LockedEggTPButton = Tab:CreateButton({
 		if (not canDoAction()) then
 			return
 		end
-		
-		local ownsKey = keyCheck()
-		if not ownsKey then
-			Rayfield:Notify({
-				Title = "No Key",
-				Content = "YOU CANT UNLOCK THIS WITHOUT A KEY",
-				Duration = 4,
-				Image = 4483362458
-			})
-		end
 
 		local room = getBestLockedEggRoom()
 		if room then
@@ -692,16 +682,6 @@ AutoLockedEgg = Tab:CreateToggle({
 	Callback = function(value)
 		if (not canDoAction()) then
 			return
-		end
-		
-		local ownsKey = keyCheck()
-		if not ownsKey then
-			Rayfield:Notify({
-				Title = "No Key",
-				Content = "YOU CANT UNLOCK THIS WITHOUT A KEY",
-				Duration = 4,
-				Image = 4483362458
-			})
 		end
 
 		if value then
@@ -819,22 +799,12 @@ BossTPButton = MiniBossTab:CreateButton({
 		if (not canDoAction()) then
 			return
 		end
-		
-		local ownsKey = keyCheck()
-		if not ownsKey then
-			Rayfield:Notify({
-				Title = "No Key",
-				Content = "YOU CANT UNLOCK THIS WITHOUT A KEY",
-				Duration = 4,
-				Image = 4483362458
-			})
-		end
 
 		local found = false
 		for _, r in ipairs(_G.ScannedRooms) do
 			if r.Id == "GameMastersStage" then
 				found = true
-				TeleportToRoom(r.Model)
+				TeleportToRoom(r.uid)
 				break
 			end
 		end
@@ -857,16 +827,6 @@ AutoFarmBoss = MiniBossTab:CreateToggle({
 	Callback = function(value)
 		if (not canDoAction()) then
 			return
-		end
-		
-		local ownsKey = keyCheck()
-		if not ownsKey then
-			Rayfield:Notify({
-				Title = "No Key",
-				Content = "YOU CANT UNLOCK THIS WITHOUT A KEY",
-				Duration = 4,
-				Image = 4483362458
-			})
 		end
 		
 		if value then
