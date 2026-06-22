@@ -20,7 +20,6 @@ local MiscItem = require(game.ReplicatedStorage.Library.Items.MiscItem)
 local EggCmds = require(game.ReplicatedStorage.Library.Client.EggCmds)
 local CustomEggsCmds = require(game.ReplicatedStorage.Library.Client.CustomEggsCmds)
 local PlayerPet = require(game.ReplicatedStorage.Library.Client.PlayerPet)
-local Signal = require(game.ReplicatedStorage.Library.Signal)
 
 local oldCalculate = PlayerPet.CalculateSpeedMultiplier
 PlayerPet.CalculateSpeedMultiplier = function(self, ...)
@@ -397,22 +396,19 @@ local function CleanupWalls()
 		return
 	end
 
-	for _, room in ipairs(folder:GetChildren()) do
-		if room.Name == "Walls" then
-			task.spawn(function()
-				local children = room:GetChildren()
-
-				for i = 1, #children do
-					children[i]:Destroy()
-
-					if i % 30 == 0 then
+	for _, child in ipairs(folder:GetChildren()) do
+		task.spawn(function()
+			if child.Name == "Walls" then
+				local children = child:GetChildren()
+				for i, part in ipairs(children) do
+					if i % 15 == 0 then
 						RunService.Heartbeat:Wait()
 					end
+					part:Destroy()
 				end
-
-				room:Destroy()
-			end)
-		end
+				child:Destroy()
+			end
+		end)
 	end
 end
 
@@ -447,21 +443,11 @@ local function TPtoSpawn()
 end
 
 local function Scan()
-	if _G.IsScanning then
+	if _G.IsScanning == true then
 		return
 	end
 
 	_G.IsScanning = true
-	
-	local character = getCharacter()
-	if not character then
-		return
-	end
-
-	local rootPart = character:FindFirstChild("HumanoidRootPart")
-	if not rootPart then
-		return
-	end
 
 	local message = createMessage("Exploring the backrooms! (ONLY WORKS FOR DEEP BACKROOMS)")
 	StatusLabel:Set("Status: Scanning...")
@@ -469,153 +455,110 @@ local function Scan()
 	local folder = getGeneratedBackrooms()
 	if not folder then
 		repeat
-			task.wait(0.5)
 			folder = getGeneratedBackrooms()
 			warn("WAITING...")
-		until folder and #folder:GetChildren() > 0
+			task.wait(0.5)
+		until folder ~= nil and #folder:GetChildren() > 0
 	end
-	
-	local deepSpawnRoom = folder:WaitForChild("DeepSpawnRoom", 3)
-	if deepSpawnRoom then
-		local spawnLocation = deepSpawnRoom:FindFirstChild("DEEP_SPAWN_LOCATION")
+
+	CleanupWalls()
+
+	local spawnRoom = folder:WaitForChild("DeepSpawnRoom", 3)
+	if spawnRoom then
+		local spawnLocation = spawnRoom:FindFirstChild("DEEP_SPAWN_LOCATION")
 		if spawnLocation then
 			enterPosition = spawnLocation.Position
 			warn("SAVED", enterPosition)
-			Network.Fire("RequestStreaming", enterPosition)
-			rootPart.CFrame = CFrame.new(enterPosition) + Vector3.new(0, 3, 0)
-		end
-	end
-	
-	local function destroyWalls(room)
-		task.spawn(function()
-			local children = room:GetChildren()
-
-			for i = 1, #children do
-				children[i]:Destroy()
-
-				if i % 30 == 0 then
-					RunService.Heartbeat:Wait()
-				end
-			end
-
-			room:Destroy()
-		end)
-	end
-
-	local function processRoom(room)
-		if room.Name == "Walls" then
-			destroyWalls(room)
-			return
-		end
-		
-		if room:GetAttribute("DeepRoom") ~= true then
-			return
-		end
-
-		local roomUID = room:GetAttribute("RoomUID")
-		if not roomUID then
-			return
-		end
-		
-		if _G.ScannedRoomsMap[roomUID] == true then
-			return
-		end
-
-		local roomId = room:GetAttribute("RoomID")
-		local roomCFrame = room:GetPivot()
-		local mult = room:GetAttribute("EggMultiplier") or 0
-
-		local roomData = {
-			uid = roomUID,
-			Id = roomId,
-			Model = room,
-			CFrame = roomCFrame,
-			Position = roomCFrame.Position,
-			EggMultiplier = mult > 0 and mult or nil
-		}
-
-		_G.ScannedRoomsMap[roomUID] = roomData
-		table.insert(_G.ScannedRooms, roomData)
-		
-		StatusLabel:Set("Status: Scanned " .. #_G.ScannedRooms .. " rooms")
-
-		if roomId == "DeepLockedEggRoom" or roomId:find("DeepFreeEggRoom", 1, true) then
-			warn(roomId .. " with " .. mult .. "x mult")
-		elseif roomId == "GameMastersStage" then
-			warn("Boss room", roomId)
-		else
-			print(roomId)
 		end
 	end
 
 	local function run()
 		local folder = getGeneratedBackrooms()
 		if not folder then
-			return
+			warn("no rooms RUN CALL")
+			return 
 		end
 
-		local rooms = folder:GetChildren()
-		for i = 1, #rooms do
-			processRoom(rooms[i])
+		for _, room in ipairs(folder:GetChildren()) do
+			if room:GetAttribute("DeepRoom") == true then
+				local roomUID = room:GetAttribute("RoomUID")
+				if roomUID then
+					local existing = _G.ScannedRoomsMap[roomUID]
+					local roomId = room:GetAttribute("RoomID")
+					local roomCFrame = room:GetPivot()
+
+					if not existing then
+						local mult = room:GetAttribute("EggMultiplier") or 0
+						local roomData = {
+							uid = roomUID,
+							Id = room:GetAttribute("RoomID"),
+							Model = room,
+							CFrame = roomCFrame,
+							Position = roomCFrame.Position,
+							EggMultiplier = mult > 0 and mult or nil
+						}
+
+						table.insert(_G.ScannedRooms, roomData)
+						_G.ScannedRoomsMap[roomUID] = roomData
+						StatusLabel:Set("Status: Scanned " .. #_G.ScannedRooms .. " rooms")
+
+						if roomId == "DeepLockedEggRoom" or string.match(roomId, "DeepFreeEggRoom") ~= nil then
+							warn(roomId .. " with " .. mult .. "x mult")
+						else
+							if roomId == "GameMastersStage" then
+								warn("Boss room", roomId)
+							else
+								print(roomId)
+							end
+						end
+					end
+				end
+			end
 		end
 	end
 
 	run()
 
-	local connection = folder.ChildAdded:Connect(function(room)
-		processRoom(room)
-	end)
-
 	while true do
-		if #_G.ScannedRooms >= 400 or _G.IsScanning == false then
+		if #_G.ScannedRooms >= 400 then
 			break
-		end
-
-		while _G.Teleporting == true do
-			task.wait(0.1)
 		end
 
 		local character = getCharacter()
 		if not character then
 			continue
 		end
-		
+
 		local rootPart = character:FindFirstChild("HumanoidRootPart")
 		if not rootPart then
 			continue
 		end
+		
+		if _G.Teleporting == true then
+			continue
+		end
 
-		local rootPos = rootPart.Position
-		local nearest = nil
-		local nearestDist = math.huge
-
-		for i = 1, #_G.ScannedRooms do
-			local room = _G.ScannedRooms[i]
-
-			if _G.VistedRooms[room.uid] == nil then
-				local diff = room.Position - rootPos
-				local dist = diff:Dot(diff)
-
-				if dist < nearestDist then
-					nearestDist = dist
-					nearest = room
+		local room = nil
+		local minDistance = math.huge
+		for _, r in ipairs(_G.ScannedRooms) do
+			if not _G.VistedRooms[r.uid] then
+				local dist = (r.Position - rootPart.Position).Magnitude
+				if dist < minDistance then
+					minDistance = dist
+					room = r
 				end
 			end
 		end
 
-		if not nearest then
-			warn("No more unvisited rooms.")
+		if not room then
+			warn("rooms break")
 			break
 		end
 
-		_G.VistedRooms[nearest.uid] = true
-		TeleportToRoom(nearest.uid, true)
+		_G.VistedRooms[room.uid] = true
+		TeleportToRoom(room.uid, true)
 		task.wait(0.5)
 		run()
-	end
-
-	if connection then
-		connection:Disconnect()
 	end
 
 	_G.IsScanning = false
@@ -1135,8 +1078,8 @@ end)
 
 task.spawn(function()
 	while (not _G.IsScanning) do
-		CleanupWalls()
 		task.wait(2)
+		CleanupWalls()
 	end
 end)
 
