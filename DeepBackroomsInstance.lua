@@ -31,6 +31,26 @@ local Signal = require(game.ReplicatedStorage.Library.Signal)
 local Types = require(game.ReplicatedStorage.Library.Items.Types)
 local AbstractItem = require(game.ReplicatedStorage.Library.Items.AbstractItem)
 local NumberShorten = require(game.ReplicatedStorage.Library.Functions.NumberShorten)
+local InventoryCmds = require(game.ReplicatedStorage.Library.Client.InventoryCmds)
+local Save = require(game.ReplicatedStorage.Library.Client.Save)
+
+local seenPets = {}
+task.spawn(function()
+	while (not Save.Get()) do
+		task.wait()
+	end
+	
+	local container = InventoryCmds.Container(Players.LocalPlayer)
+	local petType = Types.TypeUnchecked("Pet")
+	if container and petType then
+		for itemUID, item in pairs(container:All(petType)) do
+			local exclusiveLevel = item:GetExclusiveLevel()
+			if exclusiveLevel and exclusiveLevel > 3 then
+				seenPets[itemUID] = true
+			end
+		end
+	end
+end)
 
 local oldCalculate = PlayerPet.CalculateSpeedMultiplier
 PlayerPet.CalculateSpeedMultiplier = function(self, ...)
@@ -1388,51 +1408,54 @@ Network.Fired("Items: Update"):Connect(function(player, packet, currencyPacket)
 			local classType = Types.TypeUnchecked(classKey)
 			if classType then
 				for itemUID, itemData in pairs(items) do
-					local item = classType:From(itemData)
-					item:SetUID(itemUID)
+					if not seenPets[itemUID] then
+						local item = classType:From(itemData)
+						item:SetUID(itemUID)
 
-					local itemName = item:GetName()
-					local itemIcon = item:GetIcon()
-					local exists = item:GetExistCount()
-					local rap = item:GetRAP()
-					local exclusiveLevel = item:GetExclusiveLevel()
+						local exclusiveLevel = item:GetExclusiveLevel()
+						if exclusiveLevel > 3 then
+							seenPets[itemUID] = true
 
-					if exclusiveLevel > 3 then
-						local thumbnailUrl = getThumbnailUrl(string.match(itemIcon, "%d+"))
+							local itemName = item:GetName()
+							local itemIcon = item:GetIcon()
+							local exists = item:GetExistCount()
+							local rap = item:GetRAP()
+							local thumbnailUrl = getThumbnailUrl(string.match(itemIcon, "%d+"))
 
-						local embed = {
-							title = "||" .. localPlayer.Name .. "|| just hatched a " .. itemName .. "!",
-							color = 16753920,
-							fields = {
-								{
-									name = "Exists",
-									value = tostring(NumberShorten(exists)),
-									inline = true
+							local embed = {
+								title = "||" .. localPlayer.Name .. "|| just hatched a " .. itemName .. "!",
+								color = 16753920,
+								fields = {
+									{
+										name = "Exists",
+										value = tostring(NumberShorten(exists)),
+										inline = true
+									},
+									{
+										name = "RAP",
+										value = tostring(NumberShorten(rap)),
+										inline = true
+									}
 								},
-								{
-									name = "RAP",
-									value = tostring(NumberShorten(rap)),
-									inline = true
-								}
-							},
-							footer = { text = "discord.gg/k2mSRWgfhX" },
-							timestamp = DateTime.now():ToIsoDate()
-						}
+								footer = { text = "discord.gg/k2mSRWgfhX" },
+								timestamp = DateTime.now():ToIsoDate()
+							}
 
-						if thumbnailUrl then
-							embed.thumbnail = { url = thumbnailUrl }
+							if thumbnailUrl then
+								embed.thumbnail = { url = thumbnailUrl }
+							end
+
+							local content = (getgenv().discordId == "" or getgenv().discordId == nil)
+								and "@everyone"
+								or 	"<@" .. getgenv().discordId .. ">"		
+
+							sendWebhook({
+								username = "Pirate Games Logger",
+								avatar_url = "https://raw.githubusercontent.com/BuildIntoPirates/ps99/main/channels4_profile.jpg",
+								content = content,
+								embeds = { embed }
+							})
 						end
-
-						local content = (getgenv().discordId == "" or getgenv().discordId == nil)
-							and "@everyone"
-							or 	"<@" .. getgenv().discordId .. ">"		
-
-						sendWebhook({
-							username = "Pirate Games Logger",
-							avatar_url = "https://raw.githubusercontent.com/BuildIntoPirates/ps99/main/channels4_profile.jpg",
-							content = content,
-							embeds = { embed }
-						})
 					end
 				end
 			end
