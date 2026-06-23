@@ -84,6 +84,7 @@ _G.AutoMiniBoss = false
 _G.AutoTPLockedEgg = false
 _G.AutoTPAnomaly = false
 _G.InfinitePetSpeed = false
+_G.AutoTapper = false
 
 _G.SelectedLockedEggMult = "Any"
 
@@ -104,6 +105,7 @@ local AutoFarmBoss
 local RejoinButton
 local ServerHopButton
 local InfPetSpeedButton
+local AutoTapperToggle
 
 local function getCharacter()
 	return localPlayer.Character or localPlayer.CharacterAdded:Wait()
@@ -133,33 +135,33 @@ local function getThumbnailUrl(iconId)
 		warn("no http/icon")
 		return nil
 	end
-	
+
 	local default = "https://www.roblox.com/asset-thumbnail/image?assetId=" .. iconId .. "&width=420&height=420&format=png"
-	
+
 	local success, response = pcall(function()
 		return httpRequest({
 			Url = "https://thumbnails.roblox.com/v1/assets?assetIds=" .. iconId .. "&size=420x420&format=Png&isCircular=false",
 			Method = "GET"
 		})
 	end)
-	
+
 	if not success or response.StatusCode ~= 200  then
 		warn("NO DATA FOR IMAGE 111")
 		return default
 	end
-	
+
 	local decoded = HttpService:JSONDecode(response.Body)
 	if not decoded or not decoded.data then
 		warn("NO DATA FOR IMAGE 222")
 		return default
 	end
-	
+
 	local imageUrl = decoded.data[1].imageUrl
 	if not imageUrl then
 		warn("NO DATA FOR IMAGE 333")
 		return default
 	end
-	
+
 	return imageUrl
 end
 
@@ -168,18 +170,18 @@ local function sendWebhook(data)
 		warn("NO WEBHOOK!!")
 		return
 	end
-	
+
 	if not httpRequest then
 		warn("HOLY BAD 111")
 		return
 	end
-	
+
 	local body = HttpService:JSONEncode(data)
 	if not body then
 		warn("HOLY BAD 222")
 		return
 	end
-	
+
 	local success, response = pcall(function()
 		return httpRequest({
 			Url = getgenv().webhook,
@@ -188,7 +190,7 @@ local function sendWebhook(data)
 			Body = body
 		})
 	end)
-	
+
 	if not success then
 		warn("HOLY BAD 333", tostring(response))
 	end
@@ -277,7 +279,7 @@ local function getNearestEgg(character)
 	if typeof(character) ~= "Model" then
 		return
 	end
-	
+
 	local closestEgg = nil
 	local minDist = 40
 
@@ -523,7 +525,7 @@ local function CleanupWalls()
 		doneCleaning = true
 		return
 	end
-	
+
 	if doneCleaning then
 		return
 	end
@@ -543,7 +545,7 @@ local function CleanupWalls()
 			room:Destroy()
 		end
 	end
-	
+
 	doneCleaning = true
 end
 
@@ -603,12 +605,12 @@ local function Scan()
 	end
 
 	task.spawn(CleanupWalls)
-	
+
 	repeat
 		message.Text = "CLEANING UP DEBRIS..."
 		task.wait(0.5)
 	until doneCleaning == true
-	
+
 	message.Text = "Exploring the backrooms! Please wait..."
 
 	local function processRoom(room)
@@ -735,7 +737,7 @@ end
 local function isAutoAnomlyActive()
 	local anomalyActive = workspace:GetAttribute("BackroomsAnomalyActive")
 	local endsAt = workspace:GetAttribute("BackroomsAnomalyEndsAt")
-	
+
 	return _G.AutoTPAnomaly and anomalyActive == true and type(endsAt) == "number" and endsAt >= workspace:GetServerTimeNow()
 end
 
@@ -846,15 +848,15 @@ AnomalyTPButton = Tab:CreateButton({
 		if (not canDoAction()) then
 			return
 		end
-		
+
 		local character = getCharacter()
 		if not character then
 			return
 		end
-		
+
 		local isActive = workspace:GetAttribute("BackroomsAnomalyActive")
 		local endsAt = workspace:GetAttribute("BackroomsAnomalyEndsAt")
-		
+
 		if not isActive or (type(endsAt) == "number" and workspace:GetServerTimeNow() > endsAt) then
 			Rayfield:Notify({
 				Title = "No Anomly",
@@ -864,12 +866,12 @@ AnomalyTPButton = Tab:CreateButton({
 			})
 			return
 		end
-		
+
 		local pos = workspace:GetAttribute("BackroomsAnomalyPos")
 		if not pos then
 			return
 		end
-		
+
 		Network.Fire("RequestStreaming", pos)
 		character:PivotTo(CFrame.new(pos) + Vector3.new(0, 5, 0))
 	end,
@@ -1069,6 +1071,19 @@ InfPetSpeedButton = MiscTab:CreateToggle({
 	end,
 })
 
+AutoTapperToggle = MiscTab:CreateToggle({
+	Name = "Auto Tapper",
+	CurrentValue = false,
+	Flag = "AutoTapper",
+	Callback = function(value)
+		if (not canDoAction()) then
+			return
+		end
+
+		_G.AutoTapper = value
+	end,
+})
+
 RejoinButton = MiscTab:CreateButton({
 	Name = "Rejoin",
 	Callback = function()
@@ -1093,11 +1108,11 @@ InfiniteYieldButton = MiscTab:CreateButton({
 task.spawn(function()
 	while true do
 		task.wait(1)
-		
+
 		if not _G.AutoTPBestEgg then
 			continue
 		end
-		
+
 		if isAutoAnomlyActive() then
 			continue
 		end
@@ -1128,11 +1143,11 @@ end)
 task.spawn(function()
 	while true do
 		task.wait(1)
-		
+
 		if not _G.AutoTPLockedEgg then
 			continue
 		end
-		
+
 		if isAutoAnomlyActive() then
 			continue
 		end
@@ -1163,7 +1178,7 @@ end)
 task.spawn(function()
 	while true do
 		task.wait(1)
-		
+
 		if not _G.AutoTPAnomaly then
 			continue
 		end
@@ -1176,7 +1191,7 @@ task.spawn(function()
 		if not character then
 			continue
 		end
-		
+
 		local isActive = workspace:GetAttribute("BackroomsAnomalyActive")
 		local endsAt = workspace:GetAttribute("BackroomsAnomalyEndsAt")
 
@@ -1188,7 +1203,7 @@ task.spawn(function()
 		if not pos then
 			continue
 		end
-		
+
 		local distance = (character:GetPivot().Position - pos).Magnitude
 		if distance > 40 then
 			Network.Fire("RequestStreaming", pos)
@@ -1201,7 +1216,7 @@ end)
 task.spawn(function()
 	while true do
 		task.wait(0.25)
-		
+
 		if not _G.AutoHatch then
 			continue
 		end
@@ -1232,11 +1247,11 @@ end)
 task.spawn(function()
 	while true do
 		task.wait(1)
-		
+
 		if not _G.AutoMiniBoss then
 			continue
 		end
-		
+
 		if isAutoAnomlyActive() then
 			continue
 		end
@@ -1275,7 +1290,7 @@ task.spawn(function()
 			else
 				local targetBreakable = nil
 				local breakables = workspace:FindFirstChild("__THINGS"):FindFirstChild("Breakables"):GetChildren()
-				
+
 				for _, breakable in ipairs(breakables) do
 					local breakableId = breakable:GetAttribute("BreakableID")
 					if breakableId == "Daydream Mimic Chest2" then
@@ -1286,7 +1301,7 @@ task.spawn(function()
 						end
 					end
 				end
-				
+
 				if not targetBreakable then
 					for _, breakable in ipairs(breakables) do
 						local breakableId = breakable:GetAttribute("BreakableID")
@@ -1299,18 +1314,18 @@ task.spawn(function()
 						end
 					end
 				end
-				
+
 				if targetBreakable then
 					local breakableUID = targetBreakable:GetAttribute("BreakableUID")
 					local breakablePos = targetBreakable:GetPivot().Position
-					
+
 					local humanoid = character:FindFirstChildOfClass("Humanoid")
 					if humanoid then
 						humanoid:MoveTo(breakablePos)
 					end
-					
+
 					Network.UnreliableFire("Breakables_PlayerDealDamage", breakableUID)
-					
+
 					local activePets = PlayerPet.GetByPlayer(localPlayer)
 					for _, pet in pairs(activePets) do
 						if pet.cpet then
@@ -1323,6 +1338,43 @@ task.spawn(function()
 			serverHop("No Boss Room in this server. hopping...")
 			task.wait(5)
 		end 
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(0.1)
+
+		if not _G.AutoTapper then
+			continue
+		end
+
+		local character = getCharacter()
+		if not character then
+			continue
+		end
+
+		local breakables = workspace:FindFirstChild("__THINGS"):FindFirstChild("Breakables"):GetChildren()
+		local tapRange = 150
+		local nearestDistance = math.huge
+		local nearestBreakableUID = nil
+
+		for _, breakable in ipairs(breakables) do
+			local uid = breakable:GetAttribute("BreakableUID")
+			if uid and (not breakable:GetAttribute("ManualDamage")) and (not breakable:GetAttribute("DisableDamage")) then
+				local breakablePos = breakable:GetPivot().Position
+				local distance = (breakablePos - character:GetPivot().Position).Magnitude
+
+				if tapRange > distance and distance < nearestDistance then
+					nearestDistance = distance
+					nearestBreakableUID = uid
+				end
+			end
+		end
+
+		if nearestBreakableUID then
+			Signal.Fire("AutoClicker_Nearby", nearestBreakableUID)
+		end
 	end
 end)
 
@@ -1370,11 +1422,11 @@ Network.Fired("Items: Update"):Connect(function(player, packet, currencyPacket)
 						if thumbnailUrl then
 							embed.thumbnail = { url = thumbnailUrl }
 						end
-						
+
 						local content = (getgenv().discordId == "" or getgenv().discordId == nil)
 							and "@everyone"
 							or 	"<@" .. getgenv().discordId .. ">"		
-						
+
 						sendWebhook({
 							username = "Pirate Games Logger",
 							avatar_url = "https://raw.githubusercontent.com/BuildIntoPirates/ps99/main/channels4_profile.jpg",
